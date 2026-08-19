@@ -1249,8 +1249,26 @@ export default function App() {
 
   const currentTheme = (THEMES as any)[openedPackage?.theme || 'default'] || THEMES.default;
 
+  const bgHearts = useMemo(() => {
+    return [...Array(15)].map((_, i) => ({
+      id: i,
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 20}s`,
+      duration: `${15 + Math.random() * 10}s`,
+      size: `${12 + Math.random() * 14}px`,
+      opacity: 0.1 + Math.random() * 0.2
+    }));
+  }, []);
+
   return (
     <div className="app-root" style={{ background: currentTheme.bg, color: currentTheme.text } as any}>
+      <div className="bg-hearts">
+        {bgHearts.map(h => (
+          <div key={h.id} className="floating-heart" style={{ left: h.left, animationDelay: h.delay, '--d': h.duration, '--o': h.opacity } as any}>
+            <Heart size={h.size} fill="currentColor" />
+          </div>
+        ))}
+      </div>
       <style>{`
         ${FONT_IMPORT}
         .app-root {
@@ -1445,6 +1463,18 @@ export default function App() {
         @keyframes pulse-slow { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.8; } }
         .animate-pulse-slow { animation: pulse-slow 3s ease-in-out infinite; }
         @keyframes pulse { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(163,57,47,0.4); } 70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(163,57,47,0); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(163,57,47,0); } }
+        .btn-glow { animation: glow-pulse 2s infinite; }
+        @keyframes glow-pulse { 0% { box-shadow: 0 0 0 0 rgba(163,57,47,0.6); } 70% { box-shadow: 0 0 20px 10px rgba(163,57,47,0); } 100% { box-shadow: 0 0 0 0 rgba(163,57,47,0); } }
+
+        /* Floating Atmosphere */
+        .bg-hearts { position: fixed; inset: 0; pointer-events: none; z-index: -1; overflow: hidden; opacity: 0.4; }
+        .floating-heart { position: absolute; bottom: -20px; animation: float-up var(--d) linear infinite; color: var(--stamp-red); opacity: var(--o); }
+        @keyframes float-up {
+          0% { transform: translateY(0) rotate(0deg); opacity: 0; }
+          10% { opacity: var(--o); }
+          90% { opacity: var(--o); }
+          100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
+        }
         @media (prefers-reduced-motion: reduce) { .btn-primary, .btn-stamp, .item-icon-wrap, .box-lid, .box-tape, .box-glow, .confetti-dot, .tucked-card, .vinyl { transition: none !important; animation: none !important; } }
       `}</style>
 
@@ -1453,7 +1483,7 @@ export default function App() {
           <div className="modal-backdrop" style={{ zIndex: 100, backdropFilter: 'blur(10px)' }}>
             <div className="kiosk-card paper-card ethereal-glow animate-gentle-bob" style={{ maxWidth: 360, padding: 40 }}>
               <div className="brand-mark" style={{ margin: '0 auto 20px' }}>
-                <Package size={24} strokeWidth={1.75} />
+                <Heart size={24} fill="currentColor" strokeWidth={1.75} />
               </div>
               <h2 className="wordmark" style={{ fontSize: 20 }}>Security Shield</h2>
               <p className="hint" style={{ margin: '15px 0', lineHeight: 1.6 }}>
@@ -1492,7 +1522,7 @@ export default function App() {
 
         {screen === "home" && (
           <div className="home">
-            <div className="brand-mark"><Package size={24} strokeWidth={1.75} /></div>
+            <div className="brand-mark"><Heart size={24} fill="currentColor" strokeWidth={1.75} /></div>
             <h1 className="wordmark">A Little Box of Goodies</h1>
             <p className="tagline">est. for sending a little care</p>
             <div className="home-choices">
@@ -1669,7 +1699,7 @@ export default function App() {
                     )}
                     {currentTheme.stars && !lidUp && <div style={{ position: 'absolute', inset: 10, pointerEvents: 'none' }}>{[...Array(6)].map((_, i) => <div key={i} style={{ position: 'absolute', left: `${Math.random() * 80 + 10}%`, top: `${Math.random() * 80 + 10}%`, width: 4, height: 4, background: '#fff', borderRadius: '50%', opacity: 0.6, boxShadow: '0 0 5px #fff' }} />)}</div>}
                   </div>
-                  <div style={{ marginTop: 20 }}><button className="btn-primary" onClick={liftLid} disabled={lidUp || isUntying}>{isUntying ? "Unwrapping..." : "Tap to open"}</button></div>
+                  <div style={{ marginTop: 20 }}><button className="btn-primary btn-glow" onClick={liftLid} disabled={lidUp || isUntying}>{isUntying ? "Unwrapping..." : "Tap to open"}</button></div>
                 </>
               )}
             </div>
