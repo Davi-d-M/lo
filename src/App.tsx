@@ -941,8 +941,16 @@ export default function App() {
   const [sendingReaction, setSendingReaction] = useState(false);
   const [showShareSuccess, setShowShareLoveSuccess] = useState(false);
   const [inRestrictedBrowser, setInRestrictedBrowser] = useState(false);
+  const [isConfigMissing, setIsConfigMissing] = useState(false);
 
   useEffect(() => {
+    // Check for missing critical environment variables
+    const missing = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (missing) {
+      console.error("Environment variables are missing! Please check Vercel settings.");
+      setIsConfigMissing(true);
+    }
+
     if (isRestrictedBrowser()) {
       setInRestrictedBrowser(true);
       // Attempt auto-breakout for Android
@@ -1643,6 +1651,11 @@ export default function App() {
       `}</style>
 
       <div className="shell">
+        {isConfigMissing && (
+          <div style={{ background: '#a3392f', color: '#fff', padding: '10px', textAlign: 'center', fontSize: '12px', position: 'sticky', top: 0, zIndex: 200, borderRadius: '4px', marginBottom: '20px' }}>
+            <strong>Configuration Warning:</strong> Environment variables (Supabase) are missing. Some features may not work.
+          </div>
+        )}
         {inRestrictedBrowser && (
           <div className="modal-backdrop" style={{ zIndex: 100, backdropFilter: 'blur(10px)' }}>
             <div className="kiosk-card paper-card ethereal-glow animate-gentle-bob" style={{ maxWidth: 360, padding: 40 }}>
@@ -1906,12 +1919,12 @@ export default function App() {
                   <p className="to-line">{openedPackage.to}</p>
                   <p className="from-line">from {openedPackage.from}{openedPackage.sealedAt ? ` · ${new Date(openedPackage.sealedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}` : ""}</p>
                 </div>
-                <div className="tucked-grid">{openedPackage.items.map((it: any, idx: number) => <TuckedItem key={it.id} item={it} index={idx} onMediaPlay={handleMediaPlay} />)}</div>
+                <div className="tucked-grid">{openedPackage.items?.map((it: any, idx: number) => <TuckedItem key={it.id} item={it} index={idx} onMediaPlay={handleMediaPlay} />)}</div>
               </>
             ) : (
               <div className="constellation-view" style={{ width: '100%', minHeight: '80vh', background: '#020617', borderRadius: 20, position: 'relative', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>{[...Array(50)].map((_, i) => <div key={i} className="animate-pulse-slow" style={{ position: 'absolute', left: `${Math.random() * 100}%`, top: `${Math.random() * 100}%`, width: 2, height: 2, background: '#fff', boxShadow: '0 0 5px #fff', borderRadius: '50%', animationDelay: `${Math.random() * 4}s` } as any} />)}</div>
-                <div style={{ position: 'relative', zIndex: 10, width: '100%', display: 'flex', flexWrap: 'wrap', gap: 40, justifyContent: 'center', padding: 40 }}>{openedPackage.items.map((it: any, idx: number) => <div key={it.id} className="animate-gentle-bob" style={{ animationDelay: `${idx * 0.4}s`, transform: `translateZ(${(idx % 3) * 20}px)`, cursor: 'pointer' } as any}><TuckedItem item={it} index={idx} onMediaPlay={handleMediaPlay} /></div>)}</div>
+                <div style={{ position: 'relative', zIndex: 10, width: '100%', display: 'flex', flexWrap: 'wrap', gap: 40, justifyContent: 'center', padding: 40 }}>{openedPackage.items?.map((it: any, idx: number) => <div key={it.id} className="animate-gentle-bob" style={{ animationDelay: `${idx * 0.4}s`, transform: `translateZ(${(idx % 3) * 20}px)`, cursor: 'pointer' } as any}><TuckedItem item={it} index={idx} onMediaPlay={handleMediaPlay} /></div>)}</div>
               </div>
             )}
             <div className="view-footer">
