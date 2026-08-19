@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { supabase } from "./lib/supabase";
+import confetti from "canvas-confetti";
 import {
   Package,
   Send,
@@ -84,15 +85,42 @@ const THEMES = {
     boxDeep: "#d5cfb8",
     accent: "#7c2d12",
     text: "#431407",
-    waxSeal: true
+    waxSeal: true,
+    texture: "paper"
+  },
+  velvet: {
+    name: "Midnight Velvet",
+    bg: "#020617",
+    box: "#1e1b4b",
+    boxDeep: "#0f172a",
+    accent: "#c084fc",
+    text: "#e0e7ff",
+    texture: "velvet",
+    stars: true
+  },
+  gold: {
+    name: "Golden Silk",
+    bg: "#451a03",
+    box: "#78350f",
+    boxDeep: "#451a03",
+    accent: "#fbbf24",
+    text: "#fef3c7",
+    texture: "silk",
+    ribbon: true
   }
 };
 
 const MOODS = {
   none: { label: "None", url: "" },
-  piano: { label: "Soft Piano", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" },
-  rain: { label: "Gentle Rain", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" },
-  lofi: { label: "Lo-Fi Beats", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3" }
+  piano: { label: "Soft Piano", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", ambient: "crickets" },
+  rain: { label: "Gentle Rain", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", ambient: "storm" },
+  lofi: { label: "Lo-Fi Beats", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", ambient: "city" }
+};
+
+const AMBIENTS = {
+  crickets: "https://www.soundjay.com/nature/crickets-chirping-01.mp3",
+  storm: "https://www.soundjay.com/nature/rain-01.mp3",
+  city: "https://www.soundjay.com/ambient/city-traffic-01.mp3"
 };
 
 const CONFETTI = [
@@ -699,6 +727,7 @@ function AddItemModal({ type, onAdd, onClose }: any) {
 function BoutiqueAudioPlayer({ src, title, artist, onPlay }: any) {
   const [playing, setPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     return () => {
@@ -901,6 +930,13 @@ export default function App() {
   const [lidUp, setLidUp] = useState(false);
   const [isUntying, setIsUntying] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const [boxRotation, setBoxRotation] = useState({ x: -15, y: -25 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRecordingReaction, setIsRecordingReaction] = useState(false);
+  const [reactionVideoBlob, setReactionVideoBlob] = useState<string | null>(null);
+  const reactionRecorderRef = useRef<MediaRecorder | null>(null);
+  const reactionChunksRef = useRef<Blob[]>([]);
+  const [reactionSent, setReactionVideoSent] = useState(false);
   const [reactionText, setReactionText] = useState("");
   const [sendingReaction, setSendingReaction] = useState(false);
   const [showShareSuccess, setShowShareLoveSuccess] = useState(false);
@@ -918,6 +954,7 @@ export default function App() {
   }, []);
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ambientRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     if (!copied) return;
@@ -1134,25 +1171,124 @@ export default function App() {
     } catch (e) {}
   }, []);
 
+  async function startReactionCapture() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const recorder = new MediaRecorder(stream);
+      reactionRecorderRef.current = recorder;
+      reactionChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) reactionChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(reactionChunksRef.current, { type: 'video/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setReactionVideoBlob(reader.result as string);
+        };
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      recorder.start();
+      setIsRecordingReaction(true);
+      setTimeout(() => {
+        if (recorder.state === "recording") {
+          recorder.stop();
+          setIsRecordingReaction(false);
+        }
+      }, 6000);
+    } catch (err) {
+      console.error("Camera error:", err);
+    }
+  }
+
+  async function handleSendVideoReaction() {
+    if (!reactionVideoBlob || !openedPackage) return;
+    const code = enterCode || shareCode;
+    try {
+      const { data: current, error: fetchError } = await supabase.from('boxes').select('data').eq('code', code).single();
+      if (fetchError || !current) throw new Error("Fetch failed");
+      const reactions = current.data.reactions || { hearts: 0, messages: [], videos: [] };
+      if (!reactions.videos) reactions.videos = [];
+      reactions.videos.push({ src: reactionVideoBlob, at: Date.now() });
+      const newData = { ...current.data, reactions };
+      const { error } = await supabase.from('boxes').update({ data: newData }).eq('code', code);
+      if (error) throw error;
+      setReactionVideoSent(true);
+      alert("Your reaction was sent! ❤️");
+    } catch (err) {
+      console.error("Video Reaction Error:", err);
+    }
+  }
+
+  function handleBoxDrag(e: any) {
+    if (!isDragging) return;
+    const movementX = e.movementX || (e.touches && e.touches[0].clientX - (window as any).lastTouchX) || 0;
+    const movementY = e.movementY || (e.touches && e.touches[0].clientY - (window as any).lastTouchY) || 0;
+    if (e.touches) {
+      (window as any).lastTouchX = e.touches[0].clientX;
+      (window as any).lastTouchY = e.touches[0].clientY;
+    }
+    setBoxRotation(prev => ({
+      x: Math.max(-45, Math.min(45, prev.x - movementY * 0.5)),
+      y: prev.y + movementX * 0.5
+    }));
+  }
+
   function liftLid() {
     if (lidUp || isUntying) return;
     setIsUntying(true);
+    startReactionCapture();
     let audioUrl = null;
+    let ambientUrl = null;
+
     if (openedPackage?.mood === 'custom' && openedPackage.customMoodSrc) {
       audioUrl = openedPackage.customMoodSrc;
     } else if (openedPackage?.mood && openedPackage.mood !== 'none') {
-      audioUrl = (MOODS as any)[openedPackage.mood].url;
+      const moodCfg = (MOODS as any)[openedPackage.mood];
+      audioUrl = moodCfg.url;
+      if (moodCfg.ambient) ambientUrl = (AMBIENTS as any)[moodCfg.ambient];
     }
+
     if (audioUrl) {
       const audio = new Audio(audioUrl);
       audio.loop = true;
-      audio.play().then(() => setIsAudioPlaying(true)).catch(e => console.error("Audio Play Error:", e));
+      audio.volume = 0.2; // Start quiet
+      audio.play().then(() => {
+        setIsAudioPlaying(true);
+        // Fade in
+        let vol = 0.2;
+        const interval = setInterval(() => {
+          vol += 0.05;
+          if (vol >= 1) {
+            audio.volume = 1;
+            clearInterval(interval);
+          } else {
+            audio.volume = vol;
+          }
+        }, 100);
+      }).catch(e => console.error("Audio Play Error:", e));
       audioRef.current = audio;
     }
+
+    if (ambientUrl) {
+      const ambient = new Audio(ambientUrl);
+      ambient.loop = true;
+      ambient.volume = 0.4;
+      ambient.play().catch(e => console.error(e));
+      ambientRef.current = ambient;
+    }
+
     setTimeout(() => {
       setLidUp(true);
-      setTimeout(() => setScreen("view"), 650);
-    }, 600);
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: [currentTheme.accent, '#ffffff', '#f2c869']
+      });
+      setTimeout(() => setScreen("view"), 1500);
+    }, 1200);
   }
 
   function toggleAudio() {
@@ -1466,6 +1602,34 @@ export default function App() {
         .btn-glow { animation: glow-pulse 2s infinite; }
         @keyframes glow-pulse { 0% { box-shadow: 0 0 0 0 rgba(163,57,47,0.6); } 70% { box-shadow: 0 0 20px 10px rgba(163,57,47,0); } 100% { box-shadow: 0 0 0 0 rgba(163,57,47,0); } }
 
+        /* 3D Masterpiece CSS */
+        .viewport-3d { width: 100%; height: 300px; perspective: 1000px; display: flex; align-items: center; justify-content: center; cursor: grab; }
+        .viewport-3d:active { cursor: grabbing; }
+        .scene-3d { width: 140px; height: 140px; transform-style: preserve-3d; transition: transform 0.1s ease-out; position: relative; }
+        .box-3d { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; }
+        .face { position: absolute; width: 140px; height: 140px; border: 2px solid rgba(0,0,0,0.1); box-shadow: inset 0 0 20px rgba(0,0,0,0.1); }
+        .face.front  { transform: rotateY(0deg) translateZ(70px); }
+        .face.back   { transform: rotateY(180deg) translateZ(70px); }
+        .face.right  { transform: rotateY(90deg) translateZ(70px); }
+        .face.left   { transform: rotateY(-90deg) translateZ(70px); }
+        .face.top    { transform: rotateX(90deg) translateZ(70px); transform-origin: top; transition: transform 1.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .face.bottom { transform: rotateX(-90deg) translateZ(70px); }
+        .face.top.lifted { transform: rotateX(90deg) translateZ(70px) rotateX(-110deg); }
+
+        /* Textures */
+        .face.velvet { background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); }
+        .face.velvet::after { content: ''; position: absolute; inset: 0; background: url('https://www.transparenttextures.com/patterns/felt.png'); opacity: 0.3; }
+        .face.silk   { background: linear-gradient(135deg, #78350f 0%, #92400e 100%); }
+        .face.silk::after   { content: ''; position: absolute; inset: 0; background: linear-gradient(to right, transparent, rgba(255,255,255,0.1), transparent); }
+        .face.paper  { background: #e5e0d0; }
+        .face.paper::after  { content: ''; position: absolute; inset: 0; background: url('https://www.transparenttextures.com/patterns/handmade-paper.png'); opacity: 0.4; }
+
+        .wax-seal { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; background: #a3392f; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 24px; box-shadow: 0 4px 8px rgba(0,0,0,0.3); }
+
+        .hanging-tag { position: absolute; top: 20px; left: -20px; transform: translateZ(75px) rotateY(-10deg); transform-style: preserve-3d; pointer-events: none; }
+        .tag-string { width: 2px; height: 30px; background: #86602f; margin-left: 15px; }
+        .tag-paper { background: #faf6ec; padding: 5px 10px; border: 1px solid #d5cfb8; border-radius: 2px; font-family: 'Caveat', cursive; font-size: 14px; color: #251f17; transform: rotate(5deg); box-shadow: 2px 2px 5px rgba(0,0,0,0.1); }
+
         /* Floating Atmosphere */
         .bg-hearts { position: fixed; inset: 0; pointer-events: none; z-index: -1; overflow: hidden; opacity: 0.4; }
         .floating-heart { position: absolute; bottom: -20px; animation: float-up var(--d) linear infinite; color: var(--stamp-red); opacity: var(--o); }
@@ -1676,30 +1840,48 @@ export default function App() {
         )}
 
         {screen === "unwrap" && openedPackage && (
-          <div className="unwrap-screen">
+          <div className="unwrap-screen" onMouseMove={handleBoxDrag} onTouchMove={handleBoxDrag}>
             <div className="box-stage">
               {isLocked ? (
                 <div className="kiosk-card paper-card ethereal-glow"><div className="stamp-badge">Locked Time Capsule</div><p className="hint" style={{ margin: '15px 0' }}>This package from <strong>{openedPackage.from}</strong> is sealed until:</p><div className="code-display" style={{ fontSize: 18 }}>{new Date(unlockTime!).toLocaleString()}</div><p className="hint">Come back then to lift the lid!</p><button className="btn-secondary" style={{ marginTop: 20 }} onClick={resetAll}>Go Back</button></div>
               ) : (
                 <>
-                  <p className="unwrap-lead">A package from <strong>{openedPackage.from}</strong> has arrived.<br/><span style={{ fontSize: 12, opacity: 0.6 }}>Tap the box to open</span></p>
-                  <div className={`box-visual ${!lidUp && !isUntying ? 'box-shaking' : ''}`} onClick={liftLid} style={{ cursor: 'pointer' }}>
-                    <div className={`box-glow ${lidUp ? "up" : ""}`} />
-                    <div className={`ribbon-v ${isUntying ? 'untied' : ''}`} style={{ background: currentTheme.accent }} />
-                    <div className={`ribbon-h ${isUntying ? 'untied' : ''}`} style={{ background: currentTheme.accent }} />
-                    {lidUp && CONFETTI.map((c, i) => <span key={i} className="confetti-dot up" style={{ left: `calc(50% + ${c.left}px)`, background: c.color, animationDelay: `${c.delay}s`, "--dx": `${c.dx}px`, "--dy": `${c.dy}px`, "--rot": c.rot } as any} />)}
-                    <div className="box-body" style={{ background: currentTheme.boxDeep, borderColor: currentTheme.accent }} />
-                    <div className={`box-lid ${lidUp ? "up" : ""}`} style={{ background: currentTheme.box, borderColor: currentTheme.accent }} />
-                    {currentTheme.waxSeal ? (
-                      <div className={`box-tape ${lidUp || isUntying ? "peeled" : ""}`} style={{ borderRadius: '50%', width: 40, height: 40, background: currentTheme.accent, border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 20, zIndex: 10 }}>❦</div>
-                    ) : currentTheme.ribbon ? (
-                      <div className={`box-tape ${lidUp || isUntying ? "peeled" : ""}`} style={{ width: '100%', height: 10, background: currentTheme.accent, border: 'none', zIndex: 10 }} />
-                    ) : (
-                      <div className={`box-tape ${lidUp || isUntying ? "peeled" : ""}`} style={{ zIndex: 10 }}>SEALED WITH CARE</div>
-                    )}
-                    {currentTheme.stars && !lidUp && <div style={{ position: 'absolute', inset: 10, pointerEvents: 'none' }}>{[...Array(6)].map((_, i) => <div key={i} style={{ position: 'absolute', left: `${Math.random() * 80 + 10}%`, top: `${Math.random() * 80 + 10}%`, width: 4, height: 4, background: '#fff', borderRadius: '50%', opacity: 0.6, boxShadow: '0 0 5px #fff' }} />)}</div>}
+                  <p className="unwrap-lead">A package from <strong>{openedPackage.from}</strong> has arrived.<br/><span style={{ fontSize: 12, opacity: 0.6 }}>Spin to see, tap to unwrap</span></p>
+
+                  <div className="viewport-3d"
+                    onMouseDown={(e) => { setIsDragging(true); (window as any).lastTouchX = e.clientX; }}
+                    onMouseUp={() => setIsDragging(false)}
+                    onMouseLeave={() => setIsDragging(false)}
+                    onTouchStart={(e) => { setIsDragging(true); (window as any).lastTouchX = e.touches[0].clientX; (window as any).lastTouchY = e.touches[0].clientY; }}
+                    onTouchEnd={() => setIsDragging(false)}
+                  >
+                    <div className="scene-3d" style={{ transform: `rotateX(${boxRotation.x}deg) rotateY(${boxRotation.y}deg)` }}>
+                      <div className="box-3d">
+                        <div className={`face front ${currentTheme.texture}`} style={{ background: currentTheme.box }} />
+                        <div className={`face back ${currentTheme.texture}`} style={{ background: currentTheme.box }} />
+                        <div className={`face right ${currentTheme.texture}`} style={{ background: currentTheme.box }} />
+                        <div className={`face left ${currentTheme.texture}`} style={{ background: currentTheme.box }} />
+                        <div className={`face top ${currentTheme.texture} ${lidUp ? 'lifted' : ''}`} style={{ background: currentTheme.box }}>
+                           {currentTheme.waxSeal && <div className="wax-seal">❦</div>}
+                        </div>
+                        <div className={`face bottom ${currentTheme.texture}`} style={{ background: currentTheme.boxDeep }} />
+
+                        <div className="hanging-tag">
+                          <div className="tag-string" />
+                          <div className="tag-paper">
+                            <span>To: {openedPackage.to}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div style={{ marginTop: 20 }}><button className="btn-primary btn-glow" onClick={liftLid} disabled={lidUp || isUntying}>{isUntying ? "Unwrapping..." : "Tap to open"}</button></div>
+
+                  <div style={{ marginTop: 40 }}>
+                    <button className="btn-primary btn-glow" onClick={liftLid} disabled={lidUp || isUntying}>
+                      {isUntying ? "Unwrapping..." : "Lift the Lid"}
+                    </button>
+                    {isRecordingReaction && <p className="mini-caption" style={{ color: 'var(--stamp-red)', animation: 'pulse 1s infinite' }}>● Recording your reaction...</p>}
+                  </div>
                 </>
               )}
             </div>
@@ -1733,6 +1915,13 @@ export default function App() {
               </div>
             )}
             <div className="view-footer">
+              {reactionVideoBlob && !reactionSent && (
+                <div style={{ padding: '20px', background: 'rgba(163,57,47,0.05)', borderRadius: 12, marginBottom: 20, textAlign: 'center', border: '1.5px dashed var(--stamp-red)' }}>
+                  <p className="mini-caption" style={{ marginBottom: 10, color: 'var(--stamp-red)' }}>❤️ Your reaction was captured!</p>
+                  <video src={reactionVideoBlob} style={{ width: '100%', maxWidth: 200, borderRadius: 8, marginBottom: 10 }} />
+                  <button className="btn-primary" onClick={handleSendVideoReaction} style={{ width: '100%' }}>Send Video to {openedPackage.from}</button>
+                </div>
+              )}
               <div style={{ padding: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: 12, marginTop: 20, textAlign: 'center' }}>
                 <p className="mini-caption" style={{ marginBottom: 10 }}>Send a reaction back</p>
                 <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 15 }}><button className="btn-secondary" style={{ borderRadius: '50%', width: 50, height: 50, padding: 0 }} onClick={() => sendReaction('heart')}>❤️</button></div>
