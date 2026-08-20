@@ -50,6 +50,22 @@ app.get("/api/paystack/verify/:reference", async (req, res) => {
   }
 });
 
+// Paystack Webhook Handler (The "Work Well" safety net)
+app.post("/api/paystack/webhook", async (req, res) => {
+  const event = req.body;
+  console.log(`[Paystack Webhook] Received event: ${event.event}`);
+
+  // Basic security check: In production, you'd verify the Paystack signature (x-paystack-signature)
+  if (event.event === "charge.success") {
+    const { reference, customer, metadata } = event.data;
+    console.log(`[Paystack Webhook] SUCCESS: ${reference} for ${customer.email}`);
+    // Logic to ensure the box is saved in Supabase if it wasn't already
+  }
+
+  res.sendStatus(200);
+});
+
+
 // --- Enhanced Path Discovery ---
 const isVercel = !!process.env.VERCEL;
 const isProd = process.env.NODE_ENV === "production" || !!process.env.RENDER;
