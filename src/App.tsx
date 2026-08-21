@@ -1928,10 +1928,10 @@ export default function App() {
               <div className="label-header">Digital Care Package</div>
               <div className="label-body">
                 <span className="stamp-mark">to be delivered<br />with care and love</span>
-                <div className="field-row"><span className="field-tag">To</span><input className="handwritten-input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="cutie" maxLength={40} /></div>
+                <div className="field-row"><span className="field-tag">To</span><input className="handwritten-input" value={to} onChange={(e) => setTo(e.target.value)} placeholder="cutie" maxLength={100} /></div>
                 <div className="dashed-rule" />
                 <div className="field-row"><span className="field-tag">Lock until (optional)</span><input type="datetime-local" className="text-input" style={{ background: 'transparent', border: 'none', borderBottom: '1.5px dashed rgba(0,0,0,0.3)', padding: '4px 0', fontSize: 13 }} value={unlockDate} onChange={(e) => setUnlockDate(e.target.value)} /></div>
-                <div className="field-row"><span className="field-tag">From</span><input className="handwritten-input" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="you" maxLength={40} /></div>
+                <div className="field-row"><span className="field-tag">From</span><input className="handwritten-input" value={from} onChange={(e) => setFrom(e.target.value)} placeholder="you" maxLength={100} /></div>
                 <div className="perforation" />
                 <div className="barcode-wrap"><Barcode seed={to + from + items.length} /><p className="barcode-caption">{items.length} item{items.length !== 1 ? "s" : ""} tucked in · not yet sealed</p></div>
               </div>
