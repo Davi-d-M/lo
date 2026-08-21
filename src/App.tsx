@@ -942,6 +942,20 @@ export default function App() {
   const [showShareSuccess, setShowShareLoveSuccess] = useState(false);
   const [inRestrictedBrowser, setInRestrictedBrowser] = useState(false);
   const [isConfigMissing, setIsConfigMissing] = useState(false);
+  const [showWhisperModal, setShowWhisperModal] = useState(false);
+  const [whisperContent, setWhisperContent] = useState("");
+  const [whispering, setWhispering] = useState(false);
+  const [whisperSuccess, setWhisperSuccess] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminWhispers, setAdminWhispers] = useState<any[]>([]);
+  const [adminTotalBoxes, setAdminTotalBoxes] = useState(0);
+  const [appPrice, setAppPrice] = useState(5000);
+  const [appIsPaid, setAppIsPaid] = useState(true);
+  const [appAnnouncement, setAppAnnouncement] = useState("");
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [adminModeReady, setAdminModeReady] = useState(false);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const longPressTimer = useRef<any>(null);
 
   useEffect(() => {
     // Check for missing critical environment variables
@@ -959,7 +973,41 @@ export default function App() {
         window.location.href = `intent://${currentUrl}#Intent;scheme=https;package=com.android.chrome;end`;
       }
     }
+
+    fetchSettings();
   }, []);
+
+  async function fetchSettings() {
+    try {
+      const { data, error } = await supabase.from('settings').select('*');
+      if (error) throw error;
+      if (data) {
+        data.forEach(s => {
+          if (s.key === 'box_price') setAppPrice(Number(s.value));
+          if (s.key === 'is_paid') setAppIsPaid(s.value === 'true' || s.value === true);
+          if (s.key === 'announcement') setAppAnnouncement(String(s.value));
+        });
+      }
+    } catch (e) {
+      console.error("Fetch Settings Error:", e);
+    }
+  }
+
+  async function updateSetting(key: string, value: any) {
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .upsert([{ key, value }]);
+      if (error) throw error;
+
+      if (key === 'box_price') setAppPrice(Number(value));
+      if (key === 'is_paid') setAppIsPaid(value === 'true' || value === true);
+      if (key === 'announcement') setAppAnnouncement(String(value));
+    } catch (e) {
+      console.error("Update Setting Error:", e);
+      alert("Failed to update setting.");
+    }
+  }
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const ambientRef = useRef<HTMLAudioElement | null>(null);
@@ -1046,6 +1094,39 @@ export default function App() {
 
   async function handlePay() {
     if (!canCheckout) return;
+
+    // Fast Path for Free Mode
+    if (!appIsPaid) {
+      setVerifying(true);
+      try {
+        const code = generateCode();
+        const seed = generateBarcodeSeed();
+        const payload = {
+          to: to.trim(),
+          from: from.trim(),
+          items,
+          theme,
+          mood,
+          customMoodSrc,
+          sealedAt: Date.now(),
+          unlockAt: unlockDate ? new Date(unlockDate).getTime() : null,
+          secretWord: secretWord.trim().toLowerCase(),
+          isFree: true
+        };
+        const { error } = await supabase.from('boxes').insert([{ code, data: payload }]);
+        if (error) throw error;
+        setShareCode(code);
+        setBarcodeSeed(seed);
+        setScreen("sealed");
+      } catch (err) {
+        console.error("Free Seal Error:", err);
+        setSealError("Failed to seal the box. Please try again.");
+      } finally {
+        setVerifying(false);
+      }
+      return;
+    }
+
     const paystackKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
     if (!paystackKey) {
       alert("Paystack key is missing!");
@@ -1061,8 +1142,10 @@ export default function App() {
       const handler = PaystackPop.setup({
         key: paystackKey,
         email: "care@alittleboxofgoodies.io",
-        amount: 5000,
+        amount: appPrice,
         currency: "KES",
+        channels: ['mobile_money'],
+        phone: phoneNumber.trim(),
         callback: (response: any) => {
           setVerifying(true);
           const verifyPayment = async () => {
@@ -1120,6 +1203,23 @@ export default function App() {
 
   async function loadPackage(code: string) {
     if (!code) return;
+
+    // Check for Master Admin Code (Stealth Entry)
+    if (adminModeReady && code === "LOVEMASTER") {
+      setOpenLoading(true);
+      try {
+        await fetchWhispers();
+        setIsAdmin(true);
+        setScreen("admin");
+      } catch (e) {
+        setOpenError("Admin access failed.");
+      } finally {
+        setOpenLoading(false);
+        setAdminModeReady(false);
+      }
+      return;
+    }
+
     setOpenLoading(true);
     setOpenError("");
     try {
@@ -1381,6 +1481,79 @@ export default function App() {
         setShowShareLoveSuccess(true);
         setTimeout(() => setShowShareLoveSuccess(false), 2000);
       } catch (e) {}
+    }
+  }
+
+  async function fetchWhispers() {
+    setAdminLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setAdminWhispers(data || []);
+
+      // Also fetch total boxes count
+      const { count, error: countError } = await supabase
+        .from('boxes')
+        .select('*', { count: 'exact', head: true });
+      if (!countError) setAdminTotalBoxes(count || 0);
+
+    } catch (err) {
+      console.error("Fetch Whispers Error:", err);
+      throw err;
+    } finally {
+      setAdminLoading(false);
+    }
+  }
+
+  async function deleteWhisper(id: string) {
+    try {
+      const { error } = await supabase.from('feedback').delete().eq('id', id);
+      if (error) throw error;
+      setAdminWhispers(prev => prev.filter(w => w.id !== id));
+    } catch (err) {
+      console.error("Delete Whisper Error:", err);
+      alert("Failed to delete whisper.");
+    }
+  }
+
+  function startAdminLongPress() {
+    longPressTimer.current = setTimeout(() => {
+      setAdminModeReady(true);
+      // Haptic feedback or subtle visual hint if desired
+      if ('vibrate' in navigator) navigator.vibrate(50);
+      console.log("Admin mode ready. Enter master code.");
+    }, 3000);
+  }
+
+  function cancelAdminLongPress() {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }
+
+  async function handleSendWhisper() {
+    if (!whisperContent.trim()) return;
+    setWhispering(true);
+    try {
+      const { error } = await supabase.from('feedback').insert([
+        { content: whisperContent.trim(), type: 'advice' }
+      ]);
+      if (error) throw error;
+      setWhisperSuccess(true);
+      setWhisperContent("");
+      setTimeout(() => {
+        setWhisperSuccess(false);
+        setShowWhisperModal(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Whisper Error:", err);
+      alert("Couldn't send the whisper. Try again later!");
+    } finally {
+      setWhispering(false);
     }
   }
 
@@ -1699,7 +1872,31 @@ export default function App() {
 
         {screen === "home" && (
           <div className="home">
-            <div className="brand-mark"><Heart size={24} fill="currentColor" strokeWidth={1.75} /></div>
+            {appAnnouncement && (
+              <div style={{
+                background: 'var(--stamp-red)',
+                color: 'var(--paper)',
+                padding: '8px 20px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontFamily: 'Special Elite, monospace',
+                marginBottom: 20,
+                boxShadow: '0 4px 10px rgba(163,57,47,0.3)',
+                animation: 'pulse-slow 3s infinite'
+              }}>
+                ✦ {appAnnouncement} ✦
+              </div>
+            )}
+            <div
+              className="brand-mark"
+              onMouseDown={startAdminLongPress}
+              onMouseUp={cancelAdminLongPress}
+              onMouseLeave={cancelAdminLongPress}
+              onTouchStart={startAdminLongPress}
+              onTouchEnd={cancelAdminLongPress}
+            >
+              <Heart size={24} fill="currentColor" strokeWidth={1.75} />
+            </div>
             <h1 className="wordmark">A Little Box of Goodies</h1>
             <p className="tagline">est. for sending a little care</p>
             <div className="home-choices">
@@ -1717,6 +1914,10 @@ export default function App() {
             <button className="btn-stamp animate-gentle-bob" style={{ marginTop: 40, gap: 10, background: 'rgba(163,57,47,0.05)' }} onClick={handleShareLove}>
               <Heart size={18} fill={showShareSuccess ? "var(--stamp-red)" : "none"} />
               {showShareSuccess ? "Link Copied!" : "Share the Love with Friends"}
+            </button>
+
+            <button className="btn-link" style={{ marginTop: 24, fontSize: 12, opacity: 0.6 }} onClick={() => setShowWhisperModal(true)}>
+              Whisper a secret request to the creator
             </button>
           </div>
         )}
@@ -1788,6 +1989,51 @@ export default function App() {
 
         {activeForm && <AddItemModal type={activeForm} onAdd={addItem} onClose={() => setActiveForm(null)} />}
 
+        {showWhisperModal && (
+          <div className="modal-backdrop" onClick={() => !whispering && setShowWhisperModal(false)}>
+            <div className="modal-card paper-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 360 }}>
+              <div className="modal-head">
+                <Heart size={18} strokeWidth={1.75} color="var(--stamp-red)" />
+                <h3>Whisper to the Creator</h3>
+                {!whispering && (
+                  <button className="icon-btn" onClick={() => setShowWhisperModal(false)} aria-label="Close">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+
+              {whisperSuccess ? (
+                <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                  <div className="stamp-badge">Whisper Received</div>
+                  <p className="hint" style={{ marginTop: 15 }}>Your message has been tucked away safely. Thank you for caring!</p>
+                </div>
+              ) : (
+                <div className="stacked-form">
+                  <p className="hint" style={{ marginBottom: 8, textAlign: 'left' }}>
+                    Have a special request or advice on how to improve this ethereal space? Whisper it anonymously below.
+                  </p>
+                  <textarea
+                    className="note-input"
+                    rows={5}
+                    placeholder="Tuck your advice or request here..."
+                    value={whisperContent}
+                    onChange={(e) => setWhisperContent(e.target.value)}
+                    autoFocus
+                  />
+                  <div className="modal-actions">
+                    <button className="btn-secondary" onClick={() => setShowWhisperModal(false)} disabled={whispering}>
+                      Cancel
+                    </button>
+                    <button className="btn-primary" onClick={handleSendWhisper} disabled={whispering || !whisperContent.trim()}>
+                      {whispering ? "Whispering..." : "Send Whisper"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {screen === "checkout" && (
           <div className="workbench">
             <LabelCard to={to} from={from} itemCount={items.length} seed={to + from + items.length} />
@@ -1795,9 +2041,33 @@ export default function App() {
               <button className="btn-link back-edit" onClick={() => setScreen("create")}><ArrowLeft size={13} style={{ marginRight: 4, verticalAlign: -2 }} />edit your box</button>
               <div className="panel-brand"><h2>A Little Box of Goodies</h2><p className="sub">checkout · share your parcel</p></div>
               <div><span className="stamp-badge">send your package</span></div>
-              <p className="mini-caption">*** pay via Paystack ***</p>
+              <p className="mini-caption">
+                {appIsPaid ? `*** Total: ${(appPrice / 100).toFixed(0)} KES ***` : '*** Complimentary Delivery ***'}
+              </p>
+
+              {appIsPaid && (
+                <div style={{ marginTop: 15, textAlign: 'left' }}>
+                  <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 6 }}>Phone Number (Mobile Money)</p>
+                  <input
+                    type="tel"
+                    className="text-input"
+                    placeholder="e.g. 0712345678"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                  />
+                  <p className="hint" style={{ fontSize: 10, marginTop: 4 }}>You will receive an STK push to authorize this payment.</p>
+                </div>
+              )}
+
               <div className="double-rule"><span /><span /></div>
-              <button className="btn-stamp" style={{ width: "100%" }} disabled={paying || verifying} onClick={handlePay}>{verifying ? "Verifying Payment..." : paying ? "Processing…" : "Pay & Generate Link"}</button>
+              <button
+                className="btn-stamp"
+                style={{ width: "100%" }}
+                disabled={paying || verifying || (appIsPaid && !phoneNumber.trim())}
+                onClick={handlePay}
+              >
+                {verifying ? "Verifying..." : paying ? "Processing…" : appIsPaid ? "Pay & Generate Link" : "Seal for Free & Send"}
+              </button>
               <button className="btn-ghost-card" style={{ width: "100%", marginTop: 10 }} onClick={() => setPreviewOpen(true)}>Preview</button>
               {sealError && <p className="error-text">{sealError}</p>}
               <div className="double-rule" style={{ marginTop: 20 }}><span /><span /></div>
@@ -1848,6 +2118,109 @@ export default function App() {
                 <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={8} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
               )}
               {openError && <p className="error-text">{openError}</p>}
+            </div>
+          </div>
+        )}
+
+        {screen === "admin" && isAdmin && (
+          <div className="view-screen">
+            <div className="view-label paper-card" style={{ maxWidth: 650 }}>
+              <span className="delivered-stamp" style={{ color: 'var(--stamp-red)', borderColor: 'var(--stamp-red)' }}>
+                <Heart size={12} fill="currentColor" /> Dispatch Center
+              </span>
+              <p className="eyebrow" style={{ textAlign: "center", marginBottom: 2 }}>Welcome back, Creator</p>
+              <h2 className="wordmark" style={{ fontSize: 24 }}>Boutique Dispatch</h2>
+              <div className="dashed-rule" />
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
+                <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.03)', padding: 15, borderRadius: 8 }}>
+                  <p className="mini-caption">Total Whispers</p>
+                  <p style={{ fontSize: 28, fontWeight: 'bold', margin: 0 }}>{adminWhispers.length}</p>
+                </div>
+                <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.03)', padding: 15, borderRadius: 8 }}>
+                  <p className="mini-caption">Boxes Created</p>
+                  <p style={{ fontSize: 28, fontWeight: 'bold', margin: 0 }}>{adminTotalBoxes}</p>
+                </div>
+              </div>
+
+              <div className="double-rule"><span /><span /></div>
+              <p className="mini-caption">*** economy & status controls ***</p>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 15, textAlign: 'left', marginTop: 15 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '12px 15px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.1)' }}>
+                  <div>
+                    <p style={{ fontWeight: 'bold', margin: 0, fontSize: 14 }}>Paid Mode</p>
+                    <p className="mini-caption" style={{ margin: 0, textAlign: 'left' }}>Require Paystack payment</p>
+                  </div>
+                  <button
+                    className={`btn-secondary ${appIsPaid ? 'paper-soft' : ''}`}
+                    style={{ padding: '6px 14px', fontSize: 12, borderColor: appIsPaid ? 'var(--ok)' : 'rgba(0,0,0,0.2)' }}
+                    onClick={() => updateSetting('is_paid', !appIsPaid)}
+                  >
+                    {appIsPaid ? "ON" : "OFF"}
+                  </button>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '12px 15px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.1)' }}>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontWeight: 'bold', margin: 0, fontSize: 14 }}>Box Price (KES)</p>
+                    <p className="mini-caption" style={{ margin: 0, textAlign: 'left' }}>Amount in cents (e.g. 5000 = 50 KES)</p>
+                  </div>
+                  <input
+                    type="number"
+                    className="text-input"
+                    style={{ width: 100, textAlign: 'right' }}
+                    value={appPrice}
+                    onChange={(e) => updateSetting('box_price', e.target.value)}
+                  />
+                </div>
+
+                <div style={{ background: '#fff', padding: '12px 15px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.1)' }}>
+                  <p style={{ fontWeight: 'bold', margin: 0, fontSize: 14 }}>Global Announcement</p>
+                  <p className="mini-caption" style={{ margin: 0, textAlign: 'left', marginBottom: 8 }}>Appears at the top of Home screen</p>
+                  <textarea
+                    className="text-input"
+                    rows={2}
+                    placeholder="Type announcement here..."
+                    value={appAnnouncement}
+                    onChange={(e) => updateSetting('announcement', e.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <p className="mini-caption" style={{ marginTop: 20 }}>*** incoming whispers ***</p>
+            <div className="tucked-grid" style={{ maxWidth: 800 }}>
+
+              {adminLoading ? (
+                <p className="hint">Accessing the vault...</p>
+              ) : adminWhispers.length === 0 ? (
+                <div className="thankyou-card paper-card" style={{ width: 300 }}>
+                  <p className="hint">The whisper box is empty for now.</p>
+                </div>
+              ) : (
+                adminWhispers.map((w, idx) => (
+                  <div key={idx} className="tucked-card paper-card" style={{ width: 280, padding: 20 }}>
+                    <span className="washi" style={{ background: 'rgba(51, 85, 106, 0.2)' }} />
+                    <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 8 }}>
+                      {new Date(w.created_at).toLocaleString()}
+                    </p>
+                    <p className="handwritten-note" style={{ fontSize: 16 }}>{w.content}</p>
+                    <div className="thin-rule" />
+                    <button
+                      className="remove-pill"
+                      style={{ marginTop: 10, width: '100%' }}
+                      onClick={() => deleteWhisper(w.id)}
+                    >
+                      Archive Whisper
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="view-footer">
+              <button className="btn-secondary" onClick={resetAll}>Log Out of Dispatch</button>
             </div>
           </div>
         )}
