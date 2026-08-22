@@ -23,6 +23,7 @@ import {
   Ticket,
   Newspaper,
   Heart,
+  ClipboardCheck,
 } from "lucide-react";
 
 declare const PaystackPop: any;
@@ -47,6 +48,7 @@ const ITEM_TYPES = {
   location: { label: "Location", icon: MapPin },
   coupon: { label: "Coupon", icon: Ticket },
   news: { label: "News", icon: Newspaper },
+  application: { label: "Application", icon: ClipboardCheck },
 };
 
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -210,6 +212,7 @@ function itemSummary(it: any) {
   if (it.type === "location") return it.name;
   if (it.type === "coupon") return it.text;
   if (it.type === "news") return it.headline;
+  if (it.type === "application") return `${it.app.type} application`;
   return "";
 }
 
@@ -419,6 +422,28 @@ function AddItemModal({ type, onAdd, onClose }: any) {
   const [newsHeadline, setNewsHeadline] = useState("");
   const [newsBody, setNewsBody] = useState("");
 
+  const [appForm, setAppForm] = useState({
+    type: 'girlfriend',
+    name: '',
+    age: '',
+    city: '',
+    occupation: '',
+    height: '',
+    weight: '',
+    birthday: '',
+    ready: '',
+    sure: '',
+    humor: '',
+    loyal: '',
+    communicate: '',
+    bring: '',
+    dateNights: '',
+    god: '',
+    greenFlag: '',
+    tolerate: '',
+    chosen: ''
+  });
+
   async function handleFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -487,6 +512,7 @@ function AddItemModal({ type, onAdd, onClose }: any) {
     if (type === "location") return locName.trim().length > 0;
     if (type === "coupon") return couponText.trim().length > 0;
     if (type === "news") return newsHeadline.trim().length > 0;
+    if (type === "application") return appForm.name.trim().length > 0;
     return false;
   }
 
@@ -527,6 +553,7 @@ function AddItemModal({ type, onAdd, onClose }: any) {
       data.headline = newsHeadline.trim();
       data.body = newsBody.trim();
     }
+    if (type === "application") data.app = appForm;
     onAdd(data);
   }
 
@@ -591,8 +618,8 @@ function AddItemModal({ type, onAdd, onClose }: any) {
         {type === "photo" && (
           <div className="stacked-form">
             <label className="file-drop">
-              {photoBusy ? "Reading photo…" : photoDataUrl ? "Choose a different photo" : "Choose a photo from phone"}
-              <input type="file" accept="image/*" capture="environment" onChange={handleFile} hidden />
+              {photoBusy ? "Reading photo…" : photoDataUrl ? "Choose a different photo" : "Choose a photo from gallery"}
+              <input type="file" accept="image/*" onChange={handleFile} hidden />
             </label>
             {photoDataUrl && <img className="photo-preview" src={photoDataUrl} alt="Preview" />}
             {photoErr && <p className="error-text">{photoErr}</p>}
@@ -627,8 +654,8 @@ function AddItemModal({ type, onAdd, onClose }: any) {
         {type === "video" && (
           <div className="stacked-form">
             <label className="file-drop">
-              {videoBusy ? "Reading video…" : videoDataUrl ? "Choose a different video" : "Choose a video from phone"}
-              <input type="file" accept="video/*" capture="environment" onChange={handleVideoFile} hidden />
+              {videoBusy ? "Reading video…" : videoDataUrl ? "Choose a different video" : "Choose a video from gallery"}
+              <input type="file" accept="video/*" onChange={handleVideoFile} hidden />
             </label>
             {videoDataUrl && (
               <video className="photo-preview" src={videoDataUrl} controls />
@@ -710,6 +737,103 @@ function AddItemModal({ type, onAdd, onClose }: any) {
             <textarea className="note-input" rows={3} placeholder="A few lines (optional)" value={newsBody} onChange={(e) => setNewsBody(e.target.value)} />
           </div>
         )}
+
+        {type === "application" && (
+          <div className="stacked-form" style={{ maxHeight: '60vh', overflowY: 'auto', paddingRight: 5 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <button
+                type="button"
+                className={`btn-secondary ${appForm.type === 'girlfriend' ? 'paper-soft' : ''}`}
+                style={{ flex: 1, fontSize: 11, padding: '8px 4px' }}
+                onClick={() => setAppForm(prev => ({ ...prev, type: 'girlfriend' }))}
+              >
+                Girlfriend
+              </button>
+              <button
+                type="button"
+                className={`btn-secondary ${appForm.type === 'boyfriend' ? 'paper-soft' : ''}`}
+                style={{ flex: 1, fontSize: 11, padding: '8px 4px' }}
+                onClick={() => setAppForm(prev => ({ ...prev, type: 'boyfriend' }))}
+              >
+                Boyfriend
+              </button>
+            </div>
+
+            <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 5 }}>Personal Info</p>
+            <input className="text-input" placeholder="Name" value={appForm.name} onChange={(e) => setAppForm(prev => ({ ...prev, name: e.target.value }))} autoFocus />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="text-input" placeholder="Age" value={appForm.age} onChange={(e) => setAppForm(prev => ({ ...prev, age: e.target.value }))} />
+              <input className="text-input" placeholder="Birthday" value={appForm.birthday} onChange={(e) => setAppForm(prev => ({ ...prev, birthday: e.target.value }))} />
+            </div>
+            <input className="text-input" placeholder="City/State" value={appForm.city} onChange={(e) => setAppForm(prev => ({ ...prev, city: e.target.value }))} />
+            <input className="text-input" placeholder="Occupation" value={appForm.occupation} onChange={(e) => setAppForm(prev => ({ ...prev, occupation: e.target.value }))} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input className="text-input" placeholder="Height" value={appForm.height} onChange={(e) => setAppForm(prev => ({ ...prev, height: e.target.value }))} />
+              <input className="text-input" placeholder="Weight" value={appForm.weight} onChange={(e) => setAppForm(prev => ({ ...prev, weight: e.target.value }))} />
+            </div>
+
+            <p className="mini-caption" style={{ textAlign: 'left', marginTop: 15, marginBottom: 5 }}>Readiness</p>
+            <div style={{ background: 'rgba(0,0,0,0.03)', padding: 10, borderRadius: 6 }}>
+              <p style={{ fontSize: 13, margin: '0 0 8px' }}>Are you mentally ready for such position?</p>
+              <div style={{ display: 'flex', gap: 15 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="ready" checked={appForm.ready === 'yes'} onChange={() => setAppForm(prev => ({ ...prev, ready: 'yes' }))} /> Yes
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="ready" checked={appForm.ready === 'no'} onChange={() => setAppForm(prev => ({ ...prev, ready: 'no' }))} /> No
+                </label>
+              </div>
+            </div>
+            <input className="text-input" placeholder="If yes, are you sure?" value={appForm.sure} onChange={(e) => setAppForm(prev => ({ ...prev, sure: e.target.value }))} />
+
+            <p className="mini-caption" style={{ textAlign: 'left', marginTop: 15, marginBottom: 5 }}>A Few Questions</p>
+            <div style={{ background: 'rgba(0,0,0,0.03)', padding: 10, borderRadius: 6 }}>
+              <p style={{ fontSize: 13, margin: '0 0 8px' }}>Good sense of humor?</p>
+              <div style={{ display: 'flex', gap: 15 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="humor" checked={appForm.humor === 'yes'} onChange={() => setAppForm(prev => ({ ...prev, humor: 'yes' }))} /> Yes
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="humor" checked={appForm.humor === 'no'} onChange={() => setAppForm(prev => ({ ...prev, humor: 'no' }))} /> No
+                </label>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.03)', padding: 10, borderRadius: 6 }}>
+              <p style={{ fontSize: 13, margin: '0 0 8px' }}>Are you loyal?</p>
+              <div style={{ display: 'flex', gap: 15 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="loyal" checked={appForm.loyal === 'yes'} onChange={() => setAppForm(prev => ({ ...prev, loyal: 'yes' }))} /> Yes
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="loyal" checked={appForm.loyal === 'absolutely'} onChange={() => setAppForm(prev => ({ ...prev, loyal: 'absolutely' }))} /> Absolutely
+                </label>
+              </div>
+            </div>
+
+            <div style={{ background: 'rgba(0,0,0,0.03)', padding: 10, borderRadius: 6 }}>
+              <p style={{ fontSize: 13, margin: '0 0 8px' }}>Communicate instead of argue?</p>
+              <div style={{ display: 'flex', gap: 15 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="communicate" checked={appForm.communicate === 'yes'} onChange={() => setAppForm(prev => ({ ...prev, communicate: 'yes' }))} /> Yes
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 13 }}>
+                  <input type="radio" name="communicate" checked={appForm.communicate === 'no'} onChange={() => setAppForm(prev => ({ ...prev, communicate: 'no' }))} /> No
+                </label>
+              </div>
+            </div>
+
+            <textarea className="text-input" placeholder="What do you bring to a relationship?" rows={2} value={appForm.bring} onChange={(e) => setAppForm(prev => ({ ...prev, bring: e.target.value }))} />
+            <input className="text-input" placeholder="Date nights or staying in? or both?" value={appForm.dateNights} onChange={(e) => setAppForm(prev => ({ ...prev, dateNights: e.target.value }))} />
+            <input className="text-input" placeholder="Relationship with God?" value={appForm.god} onChange={(e) => setAppForm(prev => ({ ...prev, god: e.target.value }))} />
+            <input className="text-input" placeholder="Biggest green flag?" value={appForm.greenFlag} onChange={(e) => setAppForm(prev => ({ ...prev, greenFlag: e.target.value }))} />
+            <input className="text-input" placeholder="One thing you won't tolerate?" value={appForm.tolerate} onChange={(e) => setAppForm(prev => ({ ...prev, tolerate: e.target.value }))} />
+
+            <p className="mini-caption" style={{ textAlign: 'left', marginTop: 15, marginBottom: 5 }}>Final Question</p>
+            <textarea className="text-input" placeholder="Why should you be chosen?" rows={3} value={appForm.chosen} onChange={(e) => setAppForm(prev => ({ ...prev, chosen: e.target.value }))} />
+          </div>
+        )}
+
 
         <div className="modal-actions">
           <button className="btn-secondary" onClick={onClose}>
@@ -876,7 +1000,70 @@ else if (item.type === "drawing") {
         <p className="coupon-text">{item.text}</p>
       </div>
     );
+  } else if (item.type === "application") {
+    const a = item.app;
+    body = (
+      <div className="application-form" style={{
+        background: '#fff',
+        padding: '20px 15px',
+        color: '#1a1a1a',
+        textAlign: 'left',
+        fontSize: '11px',
+        border: '1px solid #eee',
+        boxShadow: '0 2px 5px rgba(0,0,0,0.05)'
+      }}>
+        <div style={{ textAlign: 'center', marginBottom: 15 }}>
+          <h4 style={{
+            fontFamily: 'Archivo Black, sans-serif',
+            fontSize: '18px',
+            color: '#a3392f',
+            margin: '0 0 2px',
+            textTransform: 'uppercase'
+          }}>
+            {a.type} Application
+          </h4>
+          <p style={{ margin: 0, opacity: 0.6, fontSize: '9px' }}>Position: Future {a.type === 'girlfriend' ? 'Girlfriend' : 'Boyfriend'} with Promotion to {a.type === 'girlfriend' ? 'Wife' : 'Husband'}</p>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 5px', marginBottom: 15 }}>
+          <div><strong>NAME:</strong> <span className="app-field">{a.name}</span></div>
+          <div><strong>AGE:</strong> <span className="app-field">{a.age}</span></div>
+          <div style={{ gridColumn: 'span 2' }}><strong>CITY/STATE:</strong> <span className="app-field">{a.city}</span></div>
+          <div style={{ gridColumn: 'span 2' }}><strong>OCCUPATION:</strong> <span className="app-field">{a.occupation}</span></div>
+          <div><strong>HEIGHT:</strong> <span className="app-field">{a.height}</span></div>
+          <div><strong>WEIGHT:</strong> <span className="app-field">{a.weight}</span></div>
+          <div style={{ gridColumn: 'span 2' }}><strong>BIRTHDAY:</strong> <span className="app-field">{a.birthday}</span></div>
+        </div>
+
+        <div style={{ marginBottom: 15 }}>
+          <p style={{ margin: '0 0 4px' }}><strong>ARE YOU MENTALLY READY?</strong> {a.ready?.toUpperCase()}</p>
+          <p style={{ margin: 0 }}><strong>IF YES, ARE YOU SURE?</strong> <span className="app-field">{a.sure}</span></p>
+        </div>
+
+        <div className="thin-rule" style={{ borderColor: '#a3392f', opacity: 0.3 }} />
+        <p style={{ color: '#a3392f', fontWeight: 'bold', margin: '10px 0 8px' }}>A FEW QUESTIONS ❤️</p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <p><strong>1. GOOD HUMOR?</strong> {a.humor?.toUpperCase()}</p>
+          <p><strong>2. ARE YOU LOYAL?</strong> {a.loyal?.toUpperCase()}</p>
+          <p><strong>3. COMMUNICATE?</strong> {a.communicate?.toUpperCase()}</p>
+          <p><strong>4. WHAT DO YOU BRING?</strong> <span className="app-field">{a.bring}</span></p>
+          <p><strong>5. DATE NIGHTS?</strong> <span className="app-field">{a.dateNights}</span></p>
+          <p><strong>6. RELATIONSHIP WITH GOD?</strong> <span className="app-field">{a.god}</span></p>
+          <p><strong>7. BIGGEST GREEN FLAG?</strong> <span className="app-field">{a.greenFlag}</span></p>
+          <p><strong>8. WON'T TOLERATE?</strong> <span className="app-field">{a.tolerate}</span></p>
+        </div>
+
+        <div style={{ marginTop: 15, paddingTop: 10, borderTop: '1px dashed #ddd' }}>
+          <p><strong>FINAL QUESTION: WHY SHOULD YOU BE CHOSEN?</strong></p>
+          <p className="app-field" style={{ marginTop: 4 }}>{a.chosen}</p>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: 15, fontSize: '20px' }}>👑</div>
+      </div>
+    );
   } else if (item.type === "news") {
+
     body = (
       <div className="news-face">
         <div className="news-head">
@@ -1740,6 +1927,7 @@ export default function App() {
         @keyframes tucked-in { 0% { opacity: 0; transform: translateY(calc(var(--y, 0px) + 16px)) rotate(var(--r)) scale(0.94); } 100% { opacity: 1; transform: translateY(var(--y, 0px)) rotate(var(--r)) scale(1); } }
         .washi { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-3deg); width: 60px; height: 20px; background: rgba(179,58,50,0.35); }
         .handwritten-note { font-family: 'Caveat', cursive; font-weight: 600; font-size: 19px; line-height: 1.35; margin: 6px 2px; white-space: pre-wrap; }
+        .app-field { font-family: 'Caveat', cursive; font-weight: 600; font-size: 15px; color: #a3392f; border-bottom: 1px dotted #ccc; padding-left: 4px; display: inline-block; min-width: 30px; }
         .polaroid-caption { font-family: 'Caveat', cursive; font-weight: 600; font-size: 15px; color: var(--ink-soft); text-align: center; margin: 8px 0 0; }
         .tucked-photo { width: 100%; display: block; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .song-face { display: flex; gap: 12px; align-items: center; padding: 6px 2px; }
