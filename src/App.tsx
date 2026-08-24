@@ -926,12 +926,23 @@ function TuckedItem({ item, index = 0, onMediaPlay }: any) {
     );
   } else if (item.type === "song") {
     body = (
-      <BoutiqueAudioPlayer
-        src={item.src || item.link}
-        title={item.title}
-        artist={item.artist}
-        onPlay={onMediaPlay}
-      />
+      <>
+        <BoutiqueAudioPlayer
+          src={item.src || item.link}
+          title={item.title}
+          artist={item.artist}
+          onPlay={onMediaPlay}
+        />
+        {item.src && (
+          <button
+            className="btn-link"
+            style={{ width: '100%', marginTop: 8, gap: 5, fontSize: 11 }}
+            onClick={() => downloadBlob(item.src, `song-${item.id}.mp3`)}
+          >
+            <Download size={12} /> Keep Song
+          </button>
+        )}
+      </>
     );
   } else if (item.type === "video") {
     if (item.src) {
@@ -986,12 +997,21 @@ function TuckedItem({ item, index = 0, onMediaPlay }: any) {
         </span>
         {item.text && <p className="handwritten-note">“{item.text}”</p>}
         {item.audioSrc && (
-          <BoutiqueAudioPlayer
-            src={item.audioSrc || item.link}
-            title="Voice Note"
-            artist="Recorded with care"
-            onPlay={onMediaPlay}
-          />
+          <>
+            <BoutiqueAudioPlayer
+              src={item.audioSrc || item.link}
+              title="Voice Note"
+              artist="Recorded with care"
+              onPlay={onMediaPlay}
+            />
+            <button
+              className="btn-link"
+              style={{ width: '100%', marginTop: 8, gap: 5, fontSize: 11 }}
+              onClick={() => downloadBlob(item.audioSrc, `voice-${item.id}.webm`)}
+            >
+              <Download size={12} /> Keep Voice Note
+            </button>
+          </>
         )}
         {item.link && !item.audioSrc && (
           <a className="listen-link" href={item.link} target="_blank" rel="noreferrer" onClick={onMediaPlay}>
@@ -1006,6 +1026,13 @@ else if (item.type === "drawing") {
       <>
         <img className="tucked-photo" src={item.src} alt="A hand drawing" />
         <p className="polaroid-caption">✎ hand drawn</p>
+        <button
+          className="btn-link"
+          style={{ width: '100%', marginTop: 8, gap: 5, fontSize: 11 }}
+          onClick={() => downloadBlob(item.src, `drawing-${item.id}.png`)}
+        >
+          <Download size={12} /> Keep Drawing
+        </button>
       </>
     );
   } else if (item.type === "location") {
@@ -1281,7 +1308,11 @@ export default function App() {
     setIsAudioPlaying(false);
     if (audioRef.current) {
       audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      audioRef.current = null;
+    }
+    if (ambientRef.current) {
+      ambientRef.current.pause();
+      ambientRef.current = null;
     }
     setScreen("home");
     try {
