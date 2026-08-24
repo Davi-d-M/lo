@@ -425,7 +425,6 @@ function AddItemModal({ type, onAdd, onClose }: any) {
   const [appForm, setAppForm] = useState({
     type: 'girlfriend',
     name: '',
-    age: '',
     city: '',
     occupation: '',
     height: '',
@@ -761,10 +760,7 @@ function AddItemModal({ type, onAdd, onClose }: any) {
 
             <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 5 }}>Personal Info</p>
             <input className="text-input" placeholder="Name" value={appForm.name} onChange={(e) => setAppForm(prev => ({ ...prev, name: e.target.value }))} autoFocus />
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input className="text-input" placeholder="Age" value={appForm.age} onChange={(e) => setAppForm(prev => ({ ...prev, age: e.target.value }))} />
-              <input className="text-input" placeholder="Birthday" value={appForm.birthday} onChange={(e) => setAppForm(prev => ({ ...prev, birthday: e.target.value }))} />
-            </div>
+            <input className="text-input" placeholder="Birthday" value={appForm.birthday} onChange={(e) => setAppForm(prev => ({ ...prev, birthday: e.target.value }))} />
             <input className="text-input" placeholder="City/State" value={appForm.city} onChange={(e) => setAppForm(prev => ({ ...prev, city: e.target.value }))} />
             <input className="text-input" placeholder="Occupation" value={appForm.occupation} onChange={(e) => setAppForm(prev => ({ ...prev, occupation: e.target.value }))} />
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1026,8 +1022,7 @@ else if (item.type === "drawing") {
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 5px', marginBottom: 15 }}>
-          <div><strong>NAME:</strong> <span className="app-field">{a.name}</span></div>
-          <div><strong>AGE:</strong> <span className="app-field">{a.age}</span></div>
+          <div style={{ gridColumn: 'span 2' }}><strong>NAME:</strong> <span className="app-field">{a.name}</span></div>
           <div style={{ gridColumn: 'span 2' }}><strong>CITY/STATE:</strong> <span className="app-field">{a.city}</span></div>
           <div style={{ gridColumn: 'span 2' }}><strong>OCCUPATION:</strong> <span className="app-field">{a.occupation}</span></div>
           <div><strong>HEIGHT:</strong> <span className="app-field">{a.height}</span></div>
@@ -1893,9 +1888,9 @@ export default function App() {
         .link-box { font-family: 'Work Sans', sans-serif; font-size: 12px; color: var(--ink-soft); background: #fff; border: 1.5px solid rgba(0,0,0,0.14); border-radius: 4px; padding: 10px 12px; margin: 4px 0 12px; word-break: break-all; text-align: left; }
         .hint { font-size: 12.5px; color: var(--ink-soft); margin-top: 10px; line-height: 1.5; }
         .open-screen, .unwrap-screen { display: flex; justify-content: center; padding-top: 20px; }
-        .kiosk-card { width: 100%; max-width: 340px; padding: 30px 26px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+        .kiosk-card { width: 100%; max-width: 360px; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
         .kiosk-card h2 { font-family: 'Archivo Black', sans-serif; font-size: 17px; margin: 10px 0 2px; }
-        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 20px; letter-spacing: 0.16em; text-transform: uppercase; margin: 14px 0 12px; }
+        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin: 14px 0 12px; }
         .box-stage { width: 100%; max-width: 340px; text-align: center; }
         .unwrap-lead { font-family: 'Work Sans', sans-serif; font-size: 14.5px; color: var(--ink); margin: 0 0 18px; font-weight: 500; }
         .unwrap-lead strong { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; color: var(--stamp-red); }
@@ -1927,7 +1922,9 @@ export default function App() {
         @keyframes tucked-in { 0% { opacity: 0; transform: translateY(calc(var(--y, 0px) + 16px)) rotate(var(--r)) scale(0.94); } 100% { opacity: 1; transform: translateY(var(--y, 0px)) rotate(var(--r)) scale(1); } }
         .washi { position: absolute; top: -10px; left: 50%; transform: translateX(-50%) rotate(-3deg); width: 60px; height: 20px; background: rgba(179,58,50,0.35); }
         .handwritten-note { font-family: 'Caveat', cursive; font-weight: 600; font-size: 19px; line-height: 1.35; margin: 6px 2px; white-space: pre-wrap; }
-        .app-field { font-family: 'Caveat', cursive; font-weight: 600; font-size: 15px; color: #a3392f; border-bottom: 1px dotted #ccc; padding-left: 4px; display: inline-block; min-width: 30px; }
+        .app-field { font-family: 'Caveat', cursive; font-weight: 600; font-size: 15px; color: #a3392f; border-bottom: 1px dotted #ccc; padding-left: 4px; display: inline-block; min-width: 30px; word-break: break-word; line-height: 1.1; }
+        .application-form p { margin: 8px 0; line-height: 1.4; }
+        .application-form strong { font-size: 9px; letter-spacing: 0.02em; color: #555; }
         .polaroid-caption { font-family: 'Caveat', cursive; font-weight: 600; font-size: 15px; color: var(--ink-soft); text-align: center; margin: 8px 0 0; }
         .tucked-photo { width: 100%; display: block; border-radius: 2px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
         .song-face { display: flex; gap: 12px; align-items: center; padding: 6px 2px; }
@@ -2303,7 +2300,7 @@ export default function App() {
               {needsSecret ? (
                 <><div className="stamp-badge">Vault Locked</div><p className="hint" style={{ margin: '15px 0' }}>This package is private. Enter the secret word to unwrap.</p><input className="code-input" value={enterSecret} onChange={(e) => setEnterSecret(e.target.value)} placeholder="SECRET WORD" onKeyDown={(e) => e.key === "Enter" && loadPackage(enterCode)} /><button className="btn-primary" onClick={() => loadPackage(enterCode)} disabled={openLoading || !enterSecret.trim()}>{openLoading ? "Verifying..." : "Unlock Vault"}</button><button className="btn-link" style={{ marginTop: 10 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button></>
               ) : (
-                <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={8} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
+                <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={15} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
               )}
               {openError && <p className="error-text">{openError}</p>}
             </div>
@@ -2489,6 +2486,45 @@ export default function App() {
               </div>
             )}
             <div className="view-footer">
+              {openedPackage.reactions && (openedPackage.reactions.hearts > 0 || openedPackage.reactions.messages?.length > 0 || openedPackage.reactions.videos?.length > 0) && (
+                <div style={{ padding: '24px 20px', background: 'rgba(255,255,255,0.4)', borderRadius: 12, marginBottom: 30, border: '1.5px solid rgba(0,0,0,0.08)', textAlign: 'left' }}>
+                  <div style={{ textAlign: 'center', marginBottom: 15 }}>
+                    <div className="stamp-badge" style={{ fontSize: 14, padding: '5px 12px' }}>The Reaction Vault</div>
+                    <p className="mini-caption">Secure access · Log of affection</p>
+                  </div>
+
+                  {openedPackage.reactions.hearts > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                      <Heart size={18} fill="var(--stamp-red)" color="var(--stamp-red)" />
+                      <p style={{ fontSize: 14, fontWeight: '600' }}>Received {openedPackage.reactions.hearts} heart{openedPackage.reactions.hearts !== 1 ? 's' : ''}</p>
+                    </div>
+                  )}
+
+                  {openedPackage.reactions.messages?.length > 0 && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 2 }}>Messages Received:</p>
+                      {openedPackage.reactions.messages.map((m: any, i: number) => (
+                        <div key={i} style={{ background: '#fff', padding: '10px 12px', borderRadius: 6, border: '1px solid rgba(0,0,0,0.05)' }}>
+                          <p style={{ fontSize: 13, margin: 0 }}>"{m.text}"</p>
+                          <p style={{ fontSize: 9, opacity: 0.5, marginTop: 4 }}>{new Date(m.at).toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {openedPackage.reactions.videos?.length > 0 && (
+                    <div style={{ marginTop: 15 }}>
+                      <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 8 }}>Video Reactions:</p>
+                      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 5 }}>
+                        {openedPackage.reactions.videos.map((v: any, i: number) => (
+                          <video key={i} src={v.src} controls style={{ height: 120, borderRadius: 6, background: '#000' }} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {reactionVideoBlob && !reactionSent && (
                 <div style={{ padding: '20px', background: 'rgba(163,57,47,0.05)', borderRadius: 12, marginBottom: 20, textAlign: 'center', border: '1.5px dashed var(--stamp-red)' }}>
                   <p className="mini-caption" style={{ marginBottom: 10, color: 'var(--stamp-red)' }}>❤️ Your reaction was captured!</p>
