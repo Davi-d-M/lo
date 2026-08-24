@@ -1136,6 +1136,7 @@ export default function App() {
   const [appAnnouncement, setAppAnnouncement] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [adminModeReady, setAdminModeReady] = useState(false);
+  const [adminSecretFound, setAdminSecretFound] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
   const longPressTimer = useRef<any>(null);
 
@@ -1386,8 +1387,10 @@ export default function App() {
   async function loadPackage(code: string) {
     if (!code) return;
 
+    const cleanCode = code.replace(/\s/g, "");
+
     // Check for Master Admin Code (Stealth Entry)
-    if (adminModeReady && code === "LOVEMASTER") {
+    if (adminModeReady && cleanCode === "LOVEMASTER") {
       setOpenLoading(true);
       try {
         await fetchWhispers();
@@ -1704,9 +1707,10 @@ export default function App() {
   function startAdminLongPress() {
     longPressTimer.current = setTimeout(() => {
       setAdminModeReady(true);
-      // Haptic feedback or subtle visual hint if desired
+      setAdminSecretFound(true);
+      setTimeout(() => setAdminSecretFound(false), 3000);
+      // Haptic feedback
       if ('vibrate' in navigator) navigator.vibrate(50);
-      console.log("Admin mode ready. Enter master code.");
     }, 3000);
   }
 
@@ -1890,7 +1894,7 @@ export default function App() {
         .open-screen, .unwrap-screen { display: flex; justify-content: center; padding-top: 20px; }
         .kiosk-card { width: 100%; max-width: 360px; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
         .kiosk-card h2 { font-family: 'Archivo Black', sans-serif; font-size: 17px; margin: 10px 0 2px; }
-        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 16px; letter-spacing: 0.05em; text-transform: uppercase; margin: 14px 0 12px; }
+        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 15px; letter-spacing: 0.02em; text-transform: uppercase; margin: 14px 0 12px; }
         .box-stage { width: 100%; max-width: 340px; text-align: center; }
         .unwrap-lead { font-family: 'Work Sans', sans-serif; font-size: 14.5px; color: var(--ink); margin: 0 0 18px; font-weight: 500; }
         .unwrap-lead strong { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; color: var(--stamp-red); }
@@ -2073,15 +2077,18 @@ export default function App() {
               </div>
             )}
             <div
-              className="brand-mark"
+              className={`brand-mark ${adminModeReady ? 'btn-glow' : ''}`}
               onMouseDown={startAdminLongPress}
               onMouseUp={cancelAdminLongPress}
               onMouseLeave={cancelAdminLongPress}
               onTouchStart={startAdminLongPress}
               onTouchEnd={cancelAdminLongPress}
+              style={adminModeReady ? { color: 'var(--ok)' } : {}}
             >
               <Heart size={24} fill="currentColor" strokeWidth={1.75} />
             </div>
+            {adminSecretFound && <p className="mini-caption" style={{ color: 'var(--ok)', marginTop: -10, marginBottom: 15 }}>✦ Secret Unlocked ✦</p>}
+
             <h1 className="wordmark">A Little Box of Goodies</h1>
             <p className="tagline">est. for sending a little care</p>
             <div className="home-choices">
