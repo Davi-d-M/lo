@@ -24,6 +24,7 @@ import {
   Newspaper,
   Heart,
   ClipboardCheck,
+  Download,
 } from "lucide-react";
 
 declare const PaystackPop: any;
@@ -170,6 +171,21 @@ function getYouTubeId(url: string) {
     /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/)|youtu\.be\/)([A-Za-z0-9_-]{11})/
   );
   return m ? m[1] : null;
+}
+
+function downloadBlob(dataUrl: string, filename: string) {
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+
+function calculateBoxSize(items: any[], customMoodSrc: string | null) {
+  let size = JSON.stringify(items).length;
+  if (customMoodSrc) size += customMoodSrc.length;
+  return size;
 }
 
 function resizeImage(file: File, maxDim = 720, quality = 0.72): Promise<string> {
@@ -461,8 +477,8 @@ function AddItemModal({ type, onAdd, onClose }: any) {
   async function handleVideoFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 15 * 1024 * 1024) {
-      setVideoErr("Video is too large (max 15MB). Try a shorter clip!");
+    if (file.size > 8 * 1024 * 1024) {
+      setVideoErr("Video is too heavy (max 8MB for boutique reliability). Try a shorter clip!");
       return;
     }
     setVideoBusy(true);
@@ -482,8 +498,8 @@ function AddItemModal({ type, onAdd, onClose }: any) {
   async function handleSongFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      setSongErr("Audio file is too large (max 10MB).");
+    if (file.size > 5 * 1024 * 1024) {
+      setSongErr("Audio file is too heavy (max 5MB).");
       return;
     }
     setSongBusy(true);
@@ -896,7 +912,18 @@ function TuckedItem({ item, index = 0, onMediaPlay }: any) {
   if (item.type === "note") {
     body = <p className="handwritten-note">{item.text}</p>;
   } else if (item.type === "photo") {
-    body = <img className="tucked-photo" src={item.src} alt="Tucked keepsake" />;
+    body = (
+      <>
+        <img className="tucked-photo" src={item.src} alt="Tucked keepsake" />
+        <button
+          className="btn-link"
+          style={{ width: '100%', marginTop: 8, gap: 5, fontSize: 11 }}
+          onClick={() => downloadBlob(item.src, `keepsake-${item.id}.jpg`)}
+        >
+          <Download size={12} /> Keep Photo
+        </button>
+      </>
+    );
   } else if (item.type === "song") {
     body = (
       <BoutiqueAudioPlayer
@@ -911,6 +938,13 @@ function TuckedItem({ item, index = 0, onMediaPlay }: any) {
       body = (
         <div className="video-embed ethereal-frame">
           <video src={item.src} controls playsInline style={{ width: '100%', display: 'block' }} onPlay={onMediaPlay} />
+          <button
+            className="btn-link"
+            style={{ width: '100%', padding: '8px 0', gap: 5, fontSize: 11, background: '#fff' }}
+            onClick={() => downloadBlob(item.src, `memory-${item.id}.webm`)}
+          >
+            <Download size={12} /> Keep Video
+          </button>
         </div>
       );
     } else {
@@ -1055,6 +1089,13 @@ else if (item.type === "drawing") {
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 15, fontSize: '20px' }}>👑</div>
+        <button
+          className="btn-stamp"
+          style={{ width: '100%', marginTop: 15, fontSize: 11, padding: '8px 0' }}
+          onClick={() => window.print()}
+        >
+          Save Application
+        </button>
       </div>
     );
   } else if (item.type === "news") {
@@ -1139,6 +1180,9 @@ export default function App() {
   const [adminSecretFound, setAdminSecretFound] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
   const longPressTimer = useRef<any>(null);
+
+  const boxSize = useMemo(() => calculateBoxSize(items, customMoodSrc), [items, customMoodSrc]);
+  const isBoxTooHeavy = boxSize > 8 * 1024 * 1024; // 8MB limit for text-based Supabase reliability
 
   useEffect(() => {
     // Check for missing critical environment variables
@@ -1724,20 +1768,25 @@ export default function App() {
   async function handleSendWhisper() {
     if (!whisperContent.trim()) return;
     setWhispering(true);
+    console.log("[Whisper] Attempting to tuck away message...");
     try {
       const { error } = await supabase.from('feedback').insert([
         { content: whisperContent.trim(), type: 'advice' }
       ]);
-      if (error) throw error;
+      if (error) {
+        console.error("[Whisper] Supabase Error:", error);
+        throw error;
+      }
+      console.log("[Whisper] Successfully tucked!");
       setWhisperSuccess(true);
       setWhisperContent("");
       setTimeout(() => {
         setWhisperSuccess(false);
         setShowWhisperModal(false);
       }, 2000);
-    } catch (err) {
-      console.error("Whisper Error:", err);
-      alert("Couldn't send the whisper. Try again later!");
+    } catch (err: any) {
+      console.error("[Whisper] Critical Error:", err);
+      alert(`Couldn't send the whisper: ${err.message || "Unknown error"}. Please check your connection.`);
     } finally {
       setWhispering(false);
     }
@@ -2009,6 +2058,14 @@ export default function App() {
           90% { opacity: var(--o); }
           100% { transform: translateY(-110vh) rotate(360deg); opacity: 0; }
         }
+        @media print {
+          .app-root > *:not(.shell) { display: none !important; }
+          .shell > *:not(.view-screen) { display: none !important; }
+          .view-screen > *:not(.tucked-grid) { display: none !important; }
+          .tucked-grid > *:not(.tucked-card:has(.application-form)) { display: none !important; }
+          .tucked-card:has(.application-form) { transform: none !important; box-shadow: none !important; border: 1px solid #ccc !important; padding: 20px !important; }
+          .washi, .btn-stamp { display: none !important; }
+        }
         @media (prefers-reduced-motion: reduce) { .btn-primary, .btn-stamp, .item-icon-wrap, .box-lid, .box-tape, .box-glow, .confetti-dot, .tucked-card, .vinyl { transition: none !important; animation: none !important; } }
       `}</style>
 
@@ -2237,6 +2294,21 @@ export default function App() {
                 {appIsPaid ? `*** Total: ${(appPrice / 100).toFixed(0)} KES ***` : '*** Complimentary Delivery ***'}
               </p>
 
+              <div style={{ marginTop: 10, textAlign: 'center' }}>
+                 <p className="mini-caption" style={{ marginBottom: 4 }}>Box Weight</p>
+                 <div style={{ width: '100%', height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${Math.min(100, (boxSize / (8 * 1024 * 1024)) * 100)}%`,
+                      height: '100%',
+                      background: isBoxTooHeavy ? 'var(--stamp-red)' : 'var(--ok)',
+                      transition: 'width 0.3s ease'
+                    }} />
+                 </div>
+                 <p style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>
+                   {isBoxTooHeavy ? "⚠ Box is too heavy to seal. Remove some items." : `${(boxSize / 1024 / 1024).toFixed(1)}MB / 8.0MB`}
+                 </p>
+              </div>
+
               {appIsPaid && (
                 <div style={{ marginTop: 15, textAlign: 'left' }}>
                   <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 6 }}>Phone Number (Mobile Money)</p>
@@ -2255,10 +2327,10 @@ export default function App() {
               <button
                 className="btn-stamp"
                 style={{ width: "100%" }}
-                disabled={paying || verifying || (appIsPaid && !phoneNumber.trim())}
+                disabled={paying || verifying || isBoxTooHeavy || (appIsPaid && !phoneNumber.trim())}
                 onClick={handlePay}
               >
-                {verifying ? "Verifying..." : paying ? "Processing…" : appIsPaid ? "Pay & Generate Link" : "Seal for Free & Send"}
+                {isBoxTooHeavy ? "Box Too Heavy" : verifying ? "Verifying..." : paying ? "Processing…" : appIsPaid ? "Pay & Generate Link" : "Seal for Free & Send"}
               </button>
               <button className="btn-ghost-card" style={{ width: "100%", marginTop: 10 }} onClick={() => setPreviewOpen(true)}>Preview</button>
               {sealError && <p className="error-text">{sealError}</p>}
@@ -2382,6 +2454,9 @@ export default function App() {
             </div>
 
             <p className="mini-caption" style={{ marginTop: 20 }}>*** incoming whispers ***</p>
+            <button className="btn-link" style={{ fontSize: 11, margin: '5px auto 15px', display: 'block' }} onClick={fetchWhispers} disabled={adminLoading}>
+              {adminLoading ? "Refreshing..." : "↻ Refresh Vault"}
+            </button>
             <div className="tucked-grid" style={{ maxWidth: 800 }}>
 
               {adminLoading ? (
