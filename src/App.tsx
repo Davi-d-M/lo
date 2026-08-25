@@ -1206,6 +1206,7 @@ export default function App() {
   const [adminModeReady, setAdminModeReady] = useState(false);
   const [adminSecretFound, setAdminSecretFound] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
+  const [adminSyncing, setAdminSyncSyncing] = useState(false);
   const longPressTimer = useRef<any>(null);
 
   const boxSize = useMemo(() => calculateBoxSize(items, customMoodSrc), [items, customMoodSrc]);
@@ -1237,9 +1238,10 @@ export default function App() {
       if (error) throw error;
       if (data) {
         data.forEach(s => {
-          if (s.key === 'box_price') setAppPrice(Number(s.value));
-          if (s.key === 'is_paid') setAppIsPaid(s.value === 'true' || s.value === true);
-          if (s.key === 'announcement') setAppAnnouncement(String(s.value));
+          const val = String(s.value);
+          if (s.key === 'box_price') setAppPrice(Number(val));
+          if (s.key === 'is_paid') setAppIsPaid(val === 'true');
+          if (s.key === 'announcement') setAppAnnouncement(val);
         });
       }
     } catch (e) {
@@ -1248,18 +1250,28 @@ export default function App() {
   }
 
   async function updateSetting(key: string, value: any) {
+    const stringValue = String(value);
+    setAdminSyncSyncing(true);
     try {
+      console.log(`[Admin] Updating ${key} to ${stringValue}...`);
       const { error } = await supabase
         .from('settings')
-        .upsert([{ key, value }]);
-      if (error) throw error;
+        .upsert([{ key, value: stringValue }]);
+      if (error) {
+        console.error("[Admin] Supabase Error:", error);
+        throw error;
+      }
 
       if (key === 'box_price') setAppPrice(Number(value));
-      if (key === 'is_paid') setAppIsPaid(value === 'true' || value === true);
-      if (key === 'announcement') setAppAnnouncement(String(value));
-    } catch (e) {
+      if (key === 'is_paid') setAppIsPaid(value === true || value === 'true');
+      if (key === 'announcement') setAppAnnouncement(stringValue);
+
+      console.log(`[Admin] ${key} updated successfully.`);
+    } catch (e: any) {
       console.error("Update Setting Error:", e);
-      alert("Failed to update setting.");
+      alert(`Failed to update setting: ${e.message}. Ensure you ran the Supabase SQL commands!`);
+    } finally {
+      setTimeout(() => setAdminSyncSyncing(false), 800);
     }
   }
 
@@ -1352,6 +1364,8 @@ export default function App() {
 
   async function handlePay() {
     if (!canCheckout) return;
+
+    console.log(`[Checkout] Initiating payment. Mode: ${appIsPaid ? 'PAID' : 'FREE'}, Price: ${appPrice}`);
 
     // Fast Path for Free Mode
     if (!appIsPaid) {
@@ -1747,6 +1761,7 @@ export default function App() {
   async function fetchWhispers() {
     setAdminLoading(true);
     try {
+      // 1. Fetch Whispers
       const { data, error } = await supabase
         .from('feedback')
         .select('*')
@@ -1754,15 +1769,19 @@ export default function App() {
       if (error) throw error;
       setAdminWhispers(data || []);
 
-      // Also fetch total boxes count
+      // 2. Fetch Total Boxes
       const { count, error: countError } = await supabase
         .from('boxes')
         .select('*', { count: 'exact', head: true });
       if (!countError) setAdminTotalBoxes(count || 0);
 
-    } catch (err) {
-      console.error("Fetch Whispers Error:", err);
-      throw err;
+      // 3. Re-fetch Settings to keep admin in sync
+      await fetchSettings();
+      console.log("[Admin] Vault synchronized successfully.");
+
+    } catch (err: any) {
+      console.error("Admin Refresh Error:", err);
+      alert(`Error fetching vault data: ${err.message}. Ensure you ran the SQL policies!`);
     } finally {
       setAdminLoading(false);
     }
@@ -2427,6 +2446,12 @@ export default function App() {
               <h2 className="wordmark" style={{ fontSize: 24 }}>Boutique Dispatch</h2>
               <div className="dashed-rule" />
 
+              {adminSyncing && (
+                <p className="mini-caption" style={{ color: 'var(--ok)', fontWeight: 'bold', marginBottom: 15, animation: 'pulse 1s infinite' }}>
+                  ✦ Syncing with Vault...
+                </p>
+              )}
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
                 <div style={{ textAlign: 'center', background: 'rgba(0,0,0,0.03)', padding: 15, borderRadius: 8 }}>
                   <p className="mini-caption">Total Whispers</p>
@@ -2449,10 +2474,16 @@ export default function App() {
                   </div>
                   <button
                     className={`btn-secondary ${appIsPaid ? 'paper-soft' : ''}`}
-                    style={{ padding: '6px 14px', fontSize: 12, borderColor: appIsPaid ? 'var(--ok)' : 'rgba(0,0,0,0.2)' }}
-                    onClick={() => updateSetting('is_paid', !appIsPaid)}
+                    style={{
+                      padding: '6px 14px',
+                      fontSize: 12,
+                      borderColor: appIsPaid ? 'var(--ok)' : 'rgba(0,0,0,0.2)',
+                      opacity: adminSyncing ? 0.5 : 1
+                    }}
+                    onClick={() => !adminSyncing && updateSetting('is_paid', !appIsPaid)}
+                    disabled={adminSyncing}
                   >
-                    {appIsPaid ? "ON" : "OFF"}
+                    {appIsPaid ? "PAID" : "FREE"}
                   </button>
                 </div>
 
@@ -2485,8 +2516,13 @@ export default function App() {
             </div>
 
             <p className="mini-caption" style={{ marginTop: 20 }}>*** incoming whispers ***</p>
-            <button className="btn-link" style={{ fontSize: 11, margin: '5px auto 15px', display: 'block' }} onClick={fetchWhispers} disabled={adminLoading}>
-              {adminLoading ? "Refreshing..." : "↻ Refresh Vault"}
+            <button
+              className="btn-link"
+              style={{ fontSize: 11, margin: '5px auto 15px', display: 'block', textDecoration: 'none' }}
+              onClick={fetchWhispers}
+              disabled={adminLoading}
+            >
+              {adminLoading ? "Accessing Vault..." : "↻ Refresh Everything"}
             </button>
             <div className="tucked-grid" style={{ maxWidth: 800 }}>
 
