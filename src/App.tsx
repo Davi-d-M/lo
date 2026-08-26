@@ -25,6 +25,9 @@ import {
   Heart,
   ClipboardCheck,
   Download,
+  Eye,
+  EyeOff,
+  History,
 } from "lucide-react";
 
 declare const PaystackPop: any;
@@ -1194,15 +1197,19 @@ export default function App() {
   const [isConfigMissing, setIsConfigMissing] = useState(false);
   const [showWhisperModal, setShowWhisperModal] = useState(false);
   const [whisperContent, setWhisperContent] = useState("");
+  const [whisperSender, setWhisperSender] = useState("");
   const [whispering, setWhispering] = useState(false);
   const [whisperSuccess, setWhisperSuccess] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminWhispers, setAdminWhispers] = useState<any[]>([]);
+  const [adminBoxes, setAdminBoxes] = useState<any[]>([]);
   const [adminTotalBoxes, setAdminTotalBoxes] = useState(0);
   const [appPrice, setAppPrice] = useState(5000);
   const [appIsPaid, setAppIsPaid] = useState(true);
   const [appAnnouncement, setAppAnnouncement] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
+  const [mySentBoxes, setMySentBoxes] = useState<string[]>([]);
+  const [showSecretWord, setShowSecretWord] = useState(false);
   const [adminModeReady, setAdminModeReady] = useState(false);
   const [adminSecretFound, setAdminSecretFound] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -1230,7 +1237,18 @@ export default function App() {
     }
 
     fetchSettings();
+
+    // Load sent boxes from local storage
+    const saved = localStorage.getItem("my_sent_boxes");
+    if (saved) setMySentBoxes(JSON.parse(saved));
   }, []);
+
+  function trackSentBox(code: string) {
+    const updated = [code, ...mySentBoxes.filter(c => c !== code)].slice(0, 10);
+    setMySentBoxes(updated);
+    localStorage.setItem("my_sent_boxes", JSON.stringify(updated));
+  }
+
 
   async function fetchSettings() {
     try {
@@ -1387,6 +1405,7 @@ export default function App() {
         };
         const { error } = await supabase.from('boxes').insert([{ code, data: payload }]);
         if (error) throw error;
+        trackSentBox(code);
         setShareCode(code);
         setBarcodeSeed(seed);
         setScreen("sealed");
@@ -1448,6 +1467,7 @@ export default function App() {
                 return;
               }
               setShareCode(code);
+              trackSentBox(code);
               setBarcodeSeed(seed);
               setScreen("sealed");
               setVerifying(false);
@@ -1769,6 +1789,13 @@ export default function App() {
       if (error) throw error;
       setAdminWhispers(data || []);
 
+      // Also fetch Box Registry for Admin
+      const { data: boxes, error: boxesError } = await supabase
+        .from('boxes')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!boxesError) setAdminBoxes(boxes || []);
+
       // 2. Fetch Total Boxes
       const { count, error: countError } = await supabase
         .from('boxes')
@@ -1821,7 +1848,7 @@ export default function App() {
     console.log("[Whisper] Attempting to tuck away message...");
     try {
       const { error } = await supabase.from('feedback').insert([
-        { content: whisperContent.trim(), type: 'advice' }
+        { content: whisperContent.trim(), type: 'advice', sender_name: whisperSender.trim() }
       ]);
       if (error) {
         console.error("[Whisper] Supabase Error:", error);
@@ -1830,6 +1857,7 @@ export default function App() {
       console.log("[Whisper] Successfully tucked!");
       setWhisperSuccess(true);
       setWhisperContent("");
+      setWhisperSender("");
       setTimeout(() => {
         setWhisperSuccess(false);
         setShowWhisperModal(false);
@@ -2210,6 +2238,26 @@ export default function App() {
                 <p>Got a code from someone? Enter it here to unwrap what they sent.</p>
               </button>
             </div>
+
+            {mySentBoxes.length > 0 && (
+              <div style={{ marginTop: 30, width: '100%', maxWidth: 480 }}>
+                <p className="eyebrow"><History size={14} style={{ verticalAlign: -2, marginRight: 6 }} /> My Sent Gifts</p>
+                <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 10 }}>
+                  {mySentBoxes.map((code) => (
+                    <button
+                      key={code}
+                      className="btn-ghost-card"
+                      style={{ padding: '10px 15px', minWidth: 100 }}
+                      onClick={() => { setEnterCode(code); loadPackage(code); }}
+                    >
+                      Code: {code}
+                    </button>
+                  ))}
+                </div>
+                <p className="hint" style={{ fontSize: 10 }}>Track reactions to your boxes safely.</p>
+              </div>
+            )}
+
             <button className="btn-stamp animate-gentle-bob" style={{ marginTop: 40, gap: 10, background: 'rgba(163,57,47,0.05)' }} onClick={handleShareLove}>
               <Heart size={18} fill={showShareSuccess ? "var(--stamp-red)" : "none"} />
               {showShareSuccess ? "Link Copied!" : "Share the Love with Friends"}
@@ -2311,6 +2359,13 @@ export default function App() {
                   <p className="hint" style={{ marginBottom: 8, textAlign: 'left' }}>
                     Have a special request or advice on how to improve this ethereal space? Whisper it anonymously below.
                   </p>
+                  <input
+                    className="text-input"
+                    placeholder="Your Name (optional)"
+                    value={whisperSender}
+                    onChange={(e) => setWhisperSender(e.target.value)}
+                    style={{ marginBottom: 10 }}
+                  />
                   <textarea
                     className="note-input"
                     rows={5}
@@ -2427,7 +2482,31 @@ export default function App() {
           <div className="open-screen">
             <div className="kiosk-card paper-card">
               {needsSecret ? (
-                <><div className="stamp-badge">Vault Locked</div><p className="hint" style={{ margin: '15px 0' }}>This package is private. Enter the secret word to unwrap.</p><input className="code-input" value={enterSecret} onChange={(e) => setEnterSecret(e.target.value)} placeholder="SECRET WORD" onKeyDown={(e) => e.key === "Enter" && loadPackage(enterCode)} /><button className="btn-primary" onClick={() => loadPackage(enterCode)} disabled={openLoading || !enterSecret.trim()}>{openLoading ? "Verifying..." : "Unlock Vault"}</button><button className="btn-link" style={{ marginTop: 10 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button></>
+                <div style={{ width: '100%' }}>
+                  <div className="stamp-badge">Vault Locked</div>
+                  <p className="hint" style={{ margin: '15px 0' }}>This package is private. Enter the secret word to unwrap.</p>
+                  <div style={{ position: 'relative' }}>
+                    <input
+                      className="code-input"
+                      type={showSecretWord ? "text" : "password"}
+                      value={enterSecret}
+                      onChange={(e) => setEnterSecret(e.target.value)}
+                      placeholder="SECRET WORD"
+                      onKeyDown={(e) => e.key === "Enter" && loadPackage(enterCode)}
+                    />
+                    <button
+                      className="icon-btn"
+                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', margin: 0 }}
+                      onClick={() => setShowSecretWord(!showSecretWord)}
+                    >
+                      {showSecretWord ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <button className="btn-primary" style={{ width: '100%', marginTop: 10 }} onClick={() => loadPackage(enterCode)} disabled={openLoading || !enterSecret.trim()}>
+                    {openLoading ? "Verifying..." : "Unlock Vault"}
+                  </button>
+                  <button className="btn-link" style={{ marginTop: 15 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button>
+                </div>
               ) : (
                 <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={15} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
               )}
@@ -2515,7 +2594,33 @@ export default function App() {
               </div>
             </div>
 
-            <p className="mini-caption" style={{ marginTop: 20 }}>*** incoming whispers ***</p>
+            <p className="mini-caption" style={{ marginTop: 20 }}>*** box registry ***</p>
+            <div className="tucked-grid" style={{ maxWidth: 850 }}>
+              {adminBoxes.length === 0 ? (
+                <p className="hint">No boxes found in the registry.</p>
+              ) : (
+                adminBoxes.map((box, idx) => (
+                  <div key={idx} className="paper-card" style={{ width: 260, padding: 15, fontSize: 11, textAlign: 'left' }}>
+                    <p style={{ fontWeight: 'bold', margin: '0 0 5px', color: 'var(--airmail)' }}>Code: {box.code}</p>
+                    <p style={{ margin: '2px 0' }}><strong>From:</strong> {box.data.from}</p>
+                    <p style={{ margin: '2px 0' }}><strong>To:</strong> {box.data.to}</p>
+                    <p style={{ margin: '2px 0' }}><strong>Secret:</strong> <span style={{ color: 'var(--stamp-red)' }}>{box.data.secretWord || "none"}</span></p>
+                    <p style={{ margin: '2px 0' }}><strong>Items:</strong> {box.data.items?.length || 0}</p>
+                    <p style={{ margin: '2px 0' }}><strong>Hearts:</strong> {box.data.reactions?.hearts || 0}</p>
+                    <p style={{ margin: '2px 0', opacity: 0.5 }}>{new Date(box.created_at).toLocaleDateString()}</p>
+                    <button
+                      className="btn-link"
+                      style={{ marginTop: 8, padding: 0, fontSize: 10 }}
+                      onClick={() => { setEnterCode(box.code); setEnterSecret(box.data.secretWord || ""); loadPackage(box.code); }}
+                    >
+                      View this box
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <p className="mini-caption" style={{ marginTop: 30 }}>*** incoming whispers ***</p>
             <button
               className="btn-link"
               style={{ fontSize: 11, margin: '5px auto 15px', display: 'block', textDecoration: 'none' }}
@@ -2536,9 +2641,10 @@ export default function App() {
                 adminWhispers.map((w, idx) => (
                   <div key={idx} className="tucked-card paper-card" style={{ width: 280, padding: 20 }}>
                     <span className="washi" style={{ background: 'rgba(51, 85, 106, 0.2)' }} />
-                    <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 8 }}>
-                      {new Date(w.created_at).toLocaleString()}
-                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <p className="mini-caption" style={{ margin: 0 }}>{w.sender_name || "Anonymous"}</p>
+                      <p className="mini-caption" style={{ margin: 0 }}>{new Date(w.created_at).toLocaleDateString()}</p>
+                    </div>
                     <p className="handwritten-note" style={{ fontSize: 16 }}>{w.content}</p>
                     <div className="thin-rule" />
                     <button
