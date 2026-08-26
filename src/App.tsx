@@ -1209,6 +1209,7 @@ export default function App() {
   const [appAnnouncement, setAppAnnouncement] = useState("");
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mySentBoxes, setMySentBoxes] = useState<string[]>([]);
+  const [sentBoxReactions, setSentBoxReactions] = useState<Record<string, number>>({});
   const [showSecretWord, setShowSecretWord] = useState(false);
   const [adminModeReady, setAdminModeReady] = useState(false);
   const [adminSecretFound, setAdminSecretFound] = useState(false);
@@ -1240,8 +1241,30 @@ export default function App() {
 
     // Load sent boxes from local storage
     const saved = localStorage.getItem("my_sent_boxes");
-    if (saved) setMySentBoxes(JSON.parse(saved));
+    if (saved) {
+      const codes = JSON.parse(saved);
+      setMySentBoxes(codes);
+      fetchSentBoxReactions(codes);
+    }
   }, []);
+
+  async function fetchSentBoxReactions(codes: string[]) {
+    if (codes.length === 0) return;
+    try {
+      const { data, error } = await supabase
+        .from('boxes')
+        .select('code, data')
+        .in('code', codes);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      data?.forEach(b => {
+        counts[b.code] = b.data.reactions?.messages?.length || 0;
+      });
+      setSentBoxReactions(counts);
+    } catch (e) {
+      console.error("Fetch reactions failed:", e);
+    }
+  }
 
   function trackSentBox(code: string) {
     const updated = [code, ...mySentBoxes.filter(c => c !== code)].slice(0, 10);
@@ -2021,7 +2044,7 @@ export default function App() {
         .open-screen, .unwrap-screen { display: flex; justify-content: center; padding-top: 20px; }
         .kiosk-card { width: 100%; max-width: 360px; padding: 40px 20px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
         .kiosk-card h2 { font-family: 'Archivo Black', sans-serif; font-size: 17px; margin: 10px 0 2px; }
-        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 15px; letter-spacing: 0.02em; text-transform: uppercase; margin: 14px 0 12px; }
+        .code-input { text-align: center; font-family: 'Special Elite', monospace; font-size: 14px; letter-spacing: 0em; text-transform: uppercase; margin: 14px 0 12px; padding: 12px 5px; }
         .box-stage { width: 100%; max-width: 340px; text-align: center; }
         .unwrap-lead { font-family: 'Work Sans', sans-serif; font-size: 14.5px; color: var(--ink); margin: 0 0 18px; font-weight: 500; }
         .unwrap-lead strong { font-family: 'Caveat', cursive; font-weight: 700; font-size: 19px; color: var(--stamp-red); }
@@ -2243,16 +2266,35 @@ export default function App() {
               <div style={{ marginTop: 30, width: '100%', maxWidth: 480 }}>
                 <p className="eyebrow"><History size={14} style={{ verticalAlign: -2, marginRight: 6 }} /> My Sent Gifts</p>
                 <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 10 }}>
-                  {mySentBoxes.map((code) => (
-                    <button
-                      key={code}
-                      className="btn-ghost-card"
-                      style={{ padding: '10px 15px', minWidth: 100 }}
-                      onClick={() => { setEnterCode(code); loadPackage(code); }}
-                    >
-                      Code: {code}
-                    </button>
-                  ))}
+                  {mySentBoxes.map((code) => {
+                    const hasReply = sentBoxReactions[code] > 0;
+                    return (
+                      <button
+                        key={code}
+                        className="btn-ghost-card"
+                        style={{ padding: '10px 15px', minWidth: 110, position: 'relative' }}
+                        onClick={() => { setEnterCode(code); loadPackage(code); }}
+                      >
+                        Code: {code}
+                        {hasReply && (
+                          <span style={{
+                            position: 'absolute',
+                            top: -5,
+                            right: -5,
+                            background: 'var(--stamp-red)',
+                            color: '#fff',
+                            fontSize: 9,
+                            padding: '2px 6px',
+                            borderRadius: 10,
+                            fontWeight: 'bold',
+                            boxShadow: '0 2px 5px rgba(0,0,0,0.2)'
+                          }}>
+                            NEW REPLY ❤️
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
                 <p className="hint" style={{ fontSize: 10 }}>Track reactions to your boxes safely.</p>
               </div>
@@ -2428,6 +2470,27 @@ export default function App() {
                 </div>
               )}
 
+              <div style={{ marginTop: 15, textAlign: 'left' }}>
+                <p className="mini-caption" style={{ textAlign: 'left', marginBottom: 6 }}>Set Secret Word (Optional)</p>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    className="text-input"
+                    type={showSecretWord ? "text" : "password"}
+                    placeholder="e.g. forever"
+                    value={secretWord}
+                    onChange={(e) => setSecretWord(e.target.value)}
+                  />
+                  <button
+                    className="icon-btn"
+                    style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', margin: 0 }}
+                    onClick={() => setShowSecretWord(!showSecretWord)}
+                  >
+                    {showSecretWord ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                </div>
+                <p className="hint" style={{ fontSize: 10, marginTop: 4 }}>Recipients must enter this word to open the box.</p>
+              </div>
+
               <div className="double-rule"><span /><span /></div>
               <button
                 className="btn-stamp"
@@ -2464,11 +2527,7 @@ export default function App() {
               <p className="eyebrow" style={{ textAlign: "center" }}>your link</p>
               <div className="link-box">{getShareUrl(shareCode)}</div>
               <button className="btn-stamp" style={{ width: "100%" }} onClick={copyLink}>{linkCopied ? <>Copied <Check size={14} /></> : <>Copy link <Copy size={14} /></>}</button>
-              <div className="thin-rule" style={{ margin: "20px 0" }} />
-              <p className="eyebrow" style={{ textAlign: "center" }}>🔒 Secret Word (Premium)</p>
-              <p className="hint" style={{ marginTop: 0 }}>Add an extra layer of privacy.</p>
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><input className="text-input" placeholder="Secret word..." value={secretWord} onChange={(e) => setSecretWord(e.target.value)} /><button className="btn-primary" onClick={updateSecretWord} disabled={isSettingSecret || !secretWord.trim()}>{isSettingSecret ? "Saving..." : "Set"}</button></div>
-              <div className="thin-rule" style={{ margin: "18px 0 14px" }} />
+              <div className="thin-rule" style={{ margin: "20px 0 14px" }} />
               <p className="mini-caption" style={{ marginBottom: 8 }}>or share the code instead</p>
               <div className="code-display">{shareCode}</div>
               <button className="btn-secondary" style={{ width: "100%" }} onClick={copyCode}>{copied ? <>Copied <Check size={14} /></> : <>Copy code <Copy size={14} /></>}</button>
@@ -2482,30 +2541,31 @@ export default function App() {
           <div className="open-screen">
             <div className="kiosk-card paper-card">
               {needsSecret ? (
-                <div style={{ width: '100%' }}>
-                  <div className="stamp-badge">Vault Locked</div>
-                  <p className="hint" style={{ margin: '15px 0' }}>This package is private. Enter the secret word to unwrap.</p>
-                  <div style={{ position: 'relative' }}>
+                <div style={{ width: '100%', padding: '10px 0' }}>
+                  <div className="stamp-badge" style={{ marginBottom: 20 }}>Vault Locked</div>
+                  <p className="hint" style={{ margin: '0 0 15px', lineHeight: 1.6 }}>This package is secured with a boutique seal. Please enter the <strong>Secret Word</strong> to unwrap.</p>
+                  <div style={{ position: 'relative', marginBottom: 15 }}>
                     <input
                       className="code-input"
                       type={showSecretWord ? "text" : "password"}
                       value={enterSecret}
                       onChange={(e) => setEnterSecret(e.target.value)}
-                      placeholder="SECRET WORD"
+                      placeholder="ENTER SECRET WORD"
                       onKeyDown={(e) => e.key === "Enter" && loadPackage(enterCode)}
                     />
                     <button
+                      type="button"
                       className="icon-btn"
-                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', margin: 0 }}
+                      style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', margin: 0, opacity: 0.5 }}
                       onClick={() => setShowSecretWord(!showSecretWord)}
                     >
                       {showSecretWord ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <button className="btn-primary" style={{ width: '100%', marginTop: 10 }} onClick={() => loadPackage(enterCode)} disabled={openLoading || !enterSecret.trim()}>
-                    {openLoading ? "Verifying..." : "Unlock Vault"}
+                  <button className="btn-primary" style={{ width: '100%' }} onClick={() => loadPackage(enterCode)} disabled={openLoading || !enterSecret.trim()}>
+                    {openLoading ? "Verifying..." : "Unlock & Unwrap"}
                   </button>
-                  <button className="btn-link" style={{ marginTop: 15 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button>
+                  <button className="btn-link" style={{ marginTop: 20, fontSize: 11 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button>
                 </div>
               ) : (
                 <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={15} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
@@ -2607,6 +2667,11 @@ export default function App() {
                     <p style={{ margin: '2px 0' }}><strong>Secret:</strong> <span style={{ color: 'var(--stamp-red)' }}>{box.data.secretWord || "none"}</span></p>
                     <p style={{ margin: '2px 0' }}><strong>Items:</strong> {box.data.items?.length || 0}</p>
                     <p style={{ margin: '2px 0' }}><strong>Hearts:</strong> {box.data.reactions?.hearts || 0}</p>
+                    {box.data.reactions?.messages?.length > 0 && (
+                      <p style={{ margin: '5px 0', fontSize: '9px', fontStyle: 'italic', opacity: 0.7 }}>
+                        Last Reply: {trunc(box.data.reactions.messages[box.data.reactions.messages.length - 1].text, 40)}
+                      </p>
+                    )}
                     <p style={{ margin: '2px 0', opacity: 0.5 }}>{new Date(box.created_at).toLocaleDateString()}</p>
                     <button
                       className="btn-link"
@@ -2787,10 +2852,48 @@ export default function App() {
                   <button className="btn-primary" onClick={handleSendVideoReaction} style={{ width: '100%' }}>Send Video to {openedPackage.from}</button>
                 </div>
               )}
-              <div style={{ padding: '20px', background: 'rgba(255,255,255,0.1)', borderRadius: 12, marginTop: 20, textAlign: 'center' }}>
-                <p className="mini-caption" style={{ marginBottom: 10 }}>Send a reaction back</p>
-                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 15 }}><button className="btn-secondary" style={{ borderRadius: '50%', width: 50, height: 50, padding: 0 }} onClick={() => sendReaction('heart')}>❤️</button></div>
-                <div style={{ display: 'flex', gap: 8 }}><input className="text-input" placeholder="Say thank you..." value={reactionText} onChange={(e) => setReactionText(e.target.value)} /><button className="btn-primary" onClick={handleSendReaction} disabled={sendingReaction || !reactionText.trim()}>Send</button></div>
+              <div style={{ padding: '24px 20px', background: 'rgba(255,255,255,0.15)', borderRadius: 12, marginTop: 30, textAlign: 'center', border: '1.5px dashed rgba(0,0,0,0.1)' }}>
+                <div style={{ textAlign: 'center', marginBottom: 15 }}>
+                  <div className="stamp-badge" style={{ fontSize: 13 }}>Boutique Correspondence</div>
+                  <p className="mini-caption">Send a formal thank you note back</p>
+                </div>
+
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginBottom: 20 }}>
+                  <button className="btn-secondary" style={{ borderRadius: '50%', width: 54, height: 54, padding: 0 }} onClick={() => sendReaction('heart')}>❤️</button>
+                </div>
+
+                <div className="stacked-form">
+                  <input
+                    className="text-input"
+                    placeholder="Your Name (The Recipient)"
+                    value={reactionText.split('|')[0] || ""}
+                    onChange={(e) => setReactionText(e.target.value + "|" + (reactionText.split('|')[1] || ""))}
+                    style={{ marginBottom: 5 }}
+                  />
+                  <textarea
+                    className="note-input"
+                    rows={4}
+                    placeholder="Type your thank you message here..."
+                    value={reactionText.split('|')[1] || ""}
+                    onChange={(e) => setReactionText((reactionText.split('|')[0] || "") + "|" + e.target.value)}
+                  />
+                  <button
+                    className="btn-primary"
+                    style={{ marginTop: 10 }}
+                    onClick={() => {
+                      const [name, msg] = reactionText.split('|');
+                      if (msg?.trim()) {
+                        setSendingReaction(true);
+                        sendReaction('message', `${name?.trim() || 'Someone'}: ${msg.trim()}`);
+                        setReactionText("");
+                        setSendingReaction(false);
+                      }
+                    }}
+                    disabled={sendingReaction || !(reactionText.split('|')[1]?.trim())}
+                  >
+                    {sendingReaction ? "Sending..." : "Send Thank You Note"}
+                  </button>
+                </div>
               </div>
               <div className="thin-rule" /><p className="mini-caption" style={{ marginTop: 4 }}>sent with care via a little box of goodies</p>
               <button className="btn-ghost-card" style={{ marginTop: 12 }} onClick={resetAll}>Pack your own <ArrowRight size={14} /></button>
