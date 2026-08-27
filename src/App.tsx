@@ -28,6 +28,8 @@ import {
   Eye,
   EyeOff,
   History,
+  Bell,
+  Calendar,
 } from "lucide-react";
 
 declare const PaystackPop: any;
@@ -1326,7 +1328,6 @@ export default function App() {
   const [whisperSuccess, setWhisperSuccess] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminWhispers, setAdminWhispers] = useState<any[]>([]);
-  const [adminBoxes, setAdminBoxes] = useState<any[]>([]);
   const [adminTotalBoxes, setAdminTotalBoxes] = useState(0);
   const [adminRevenue, setAdminTotalRevenue] = useState(0);
   const [adminPopularItems, setAdminPopularItems] = useState<Record<string, number>>({});
@@ -1399,6 +1400,67 @@ export default function App() {
     localStorage.setItem("my_sent_boxes", JSON.stringify(updated));
   }
 
+  function handleCalendarReminder() {
+    if (!openedPackage || !unlockTime) return;
+
+    const start = new Date(unlockTime).toISOString().replace(/-|:|\.\d+/g, "");
+    const end = new Date(unlockTime + 30 * 60000).toISOString().replace(/-|:|\.\d+/g, ""); // 30 mins event
+
+    const icsContent = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "BEGIN:VEVENT",
+      `DTSTART:${start}`,
+      `DTEND:${end}`,
+      `SUMMARY:Unwrap Love Box from ${openedPackage.from}`,
+      "DESCRIPTION:It is time to lift the lid on your boutique care package!",
+      "END:VEVENT",
+      "END:VCALENDAR"
+    ].join("\r\n");
+
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `love-box-reminder.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  function handleBrowserNotification() {
+    if (!("Notification" in window)) {
+      alert("This browser does not support notifications.");
+      return;
+    }
+
+    Notification.requestPermission().then(permission => {
+      if (permission === "granted") {
+        alert("✓ Notification set! We'll alert you when it hits zero.");
+      }
+    });
+  }
+
+  useEffect(() => {
+    if (unlockTime && isLocked) {
+      const check = setInterval(() => {
+        if (Date.now() >= unlockTime) {
+          if (Notification.permission === "granted") {
+            new Notification("A Little Box of Goodies", {
+              body: "It's time! Your time capsule is ready to be opened. ❤️",
+              icon: "/og-heart.svg"
+            });
+            // Try to play a subtle ding
+            const audio = new Audio("https://www.soundjay.com/buttons/beep-07a.mp3");
+            audio.play().catch(() => {});
+          }
+          clearInterval(check);
+        }
+      }, 1000);
+      return () => clearInterval(check);
+    }
+  }, [unlockTime, isLocked]);
+
 
   async function fetchSettings() {
     try {
@@ -1424,16 +1486,15 @@ export default function App() {
   }
 
   async function updateSetting(key: string, value: any) {
-    // Standardize all values to strings for boutique database consistency
     const stringValue = String(value);
     setAdminSyncSyncing(true);
     try {
       console.log(`[Admin] Syncing setting: ${key} = ${stringValue}`);
 
-      // Attempt upsert (insert or update)
+      // Robust array-based upsert for better compatibility
       const { error } = await supabase
         .from('settings')
-        .upsert({ key, value: stringValue }, { onConflict: 'key' });
+        .upsert([{ key, value: stringValue }]);
 
       if (error) throw error;
 
@@ -1949,21 +2010,19 @@ export default function App() {
       if (error) throw error;
       setAdminWhispers(data || []);
 
-      // Also fetch Box Registry for Admin
+      // Also fetch Stats for Admin
       const { data: boxes, error: boxesError } = await supabase
         .from('boxes')
-        .select('*')
+        .select('data')
         .order('created_at', { ascending: false });
       if (!boxesError) {
-        setAdminBoxes(boxes || []);
-
         // Calculate Analytics
         let rev = 0;
         const itemStats: Record<string, number> = {};
         const themeStats: Record<string, number> = {};
 
         boxes?.forEach(b => {
-          if (b.data.reference) rev += (appPrice / 100); // Approximate based on current price if reference exists
+          if (b.data.reference) rev += (appPrice / 100);
 
           b.data.items?.forEach((it: any) => {
             itemStats[it.type] = (itemStats[it.type] || 0) + 1;
@@ -2835,38 +2894,7 @@ export default function App() {
               </div>
             </div>
 
-            <p className="mini-caption" style={{ marginTop: 20 }}>*** box registry ***</p>
-            <div className="tucked-grid" style={{ maxWidth: 850 }}>
-              {adminBoxes.length === 0 ? (
-                <p className="hint">No boxes found in the registry.</p>
-              ) : (
-                adminBoxes.map((box, idx) => (
-                  <div key={idx} className="paper-card" style={{ width: 260, padding: 15, fontSize: 11, textAlign: 'left' }}>
-                    <p style={{ fontWeight: 'bold', margin: '0 0 5px', color: 'var(--airmail)' }}>Code: {box.code}</p>
-                    <p style={{ margin: '2px 0' }}><strong>From:</strong> {box.data.from}</p>
-                    <p style={{ margin: '2px 0' }}><strong>To:</strong> {box.data.to}</p>
-                    <p style={{ margin: '2px 0' }}><strong>Secret:</strong> <span style={{ color: 'var(--stamp-red)' }}>{box.data.secretWord || "none"}</span></p>
-                    <p style={{ margin: '2px 0' }}><strong>Items:</strong> {box.data.items?.length || 0}</p>
-                    <p style={{ margin: '2px 0' }}><strong>Hearts:</strong> {box.data.reactions?.hearts || 0}</p>
-                    {box.data.reactions?.messages?.length > 0 && (
-                      <p style={{ margin: '5px 0', fontSize: '9px', fontStyle: 'italic', opacity: 0.7 }}>
-                        Last Reply: {trunc(box.data.reactions.messages[box.data.reactions.messages.length - 1].text, 40)}
-                      </p>
-                    )}
-                    <p style={{ margin: '2px 0', opacity: 0.5 }}>{new Date(box.created_at).toLocaleDateString()}</p>
-                    <button
-                      className="btn-link"
-                      style={{ marginTop: 8, padding: 0, fontSize: 10 }}
-                      onClick={() => { setEnterCode(box.code); setEnterSecret(box.data.secretWord || ""); loadPackage(box.code); }}
-                    >
-                      View this box
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <p className="mini-caption" style={{ marginTop: 30 }}>*** incoming whispers ***</p>
+            <p className="mini-caption" style={{ marginTop: 20 }}>*** incoming whispers ***</p>
             <button
               className="btn-link"
               style={{ fontSize: 11, margin: '5px auto 15px', display: 'block', textDecoration: 'none' }}
@@ -2921,7 +2949,27 @@ export default function App() {
 
                   <Countdown targetDate={unlockTime!} />
 
-                  <p className="hint" style={{ fontSize: 11 }}>Come back when the timer hits zero!</p>
+                  <div style={{ background: 'rgba(255,255,255,0.4)', padding: 15, borderRadius: 8, marginTop: 10 }}>
+                    <p className="mini-caption" style={{ marginBottom: 12 }}>Don't miss the moment</p>
+                    <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '8px 12px', fontSize: 11, gap: 6 }}
+                        onClick={handleCalendarReminder}
+                      >
+                        <Calendar size={14} /> Add to Calendar
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        style={{ padding: '8px 12px', fontSize: 11, gap: 6 }}
+                        onClick={handleBrowserNotification}
+                      >
+                        <Bell size={14} /> Notify Me
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="hint" style={{ fontSize: 11, marginTop: 20 }}>Come back when the timer hits zero!</p>
                   <button className="btn-secondary" style={{ marginTop: 25, width: '100%' }} onClick={resetAll}>Go Back</button>
                 </div>
               ) : (
