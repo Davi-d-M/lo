@@ -185,6 +185,24 @@ function downloadBlob(dataUrl: string, filename: string) {
   document.body.removeChild(link);
 }
 
+async function uploadMedia(file: File) {
+  const fileExt = file.name.split('.').pop();
+  const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+  const filePath = `uploads/${fileName}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('tucked_items')
+    .upload(filePath, file);
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from('tucked_items')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl;
+}
+
 function calculateBoxSize(items: any[], customMoodSrc: string | null) {
   let size = JSON.stringify(items).length;
   if (customMoodSrc) size += customMoodSrc.length;
@@ -468,10 +486,10 @@ function AddItemModal({ type, onAdd, onClose }: any) {
     setPhotoBusy(true);
     setPhotoErr("");
     try {
-      const dataUrl = await resizeImage(file);
-      setPhotoDataUrl(dataUrl);
+      const publicUrl = await uploadMedia(file);
+      setPhotoDataUrl(publicUrl);
     } catch (err) {
-      setPhotoErr("Couldn't read that photo — try a different file.");
+      setPhotoErr("Failed to upload photo to boutique stash.");
     } finally {
       setPhotoBusy(false);
     }
@@ -480,43 +498,39 @@ function AddItemModal({ type, onAdd, onClose }: any) {
   async function handleVideoFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 8 * 1024 * 1024) {
-      setVideoErr("Video is too heavy (max 8MB for boutique reliability). Try a shorter clip!");
+    if (file.size > 50 * 1024 * 1024) {
+      setVideoErr("Video is too heavy (max 50MB). Try a shorter clip!");
       return;
     }
     setVideoBusy(true);
     setVideoErr("");
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setVideoDataUrl(ev.target?.result as string);
+    try {
+      const publicUrl = await uploadMedia(file);
+      setVideoDataUrl(publicUrl);
+    } catch (err) {
+      setVideoErr("Failed to upload video to boutique stash.");
+    } finally {
       setVideoBusy(false);
-    };
-    reader.onerror = () => {
-      setVideoErr("Failed to read video file.");
-      setVideoBusy(false);
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   async function handleSongFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
-      setSongErr("Audio file is too heavy (max 5MB).");
+    if (file.size > 20 * 1024 * 1024) {
+      setSongErr("Audio file is too heavy (max 20MB).");
       return;
     }
     setSongBusy(true);
     setSongErr("");
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setSongDataUrl(ev.target?.result as string);
+    try {
+      const publicUrl = await uploadMedia(file);
+      setSongDataUrl(publicUrl);
+    } catch (err) {
+      setSongErr("Failed to upload audio to boutique stash.");
+    } finally {
       setSongBusy(false);
-    };
-    reader.onerror = () => {
-      setSongErr("Failed to read audio file.");
-      setSongBusy(false);
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   function canAdd() {
@@ -1149,6 +1163,116 @@ else if (item.type === "drawing") {
   );
 }
 
+function Countdown({ targetDate }: { targetDate: number }) {
+  const [timeLeft, setTimeLeft] = useState(targetDate - Date.now());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const diff = targetDate - Date.now();
+      if (diff <= 0) {
+        clearInterval(timer);
+        window.location.reload(); // Refresh to unlock
+      }
+      setTimeLeft(diff);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [targetDate]);
+
+  if (timeLeft <= 0) return null;
+
+  const days = Math.floor(timeLeft / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((timeLeft % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+
+  return (
+    <div style={{ display: 'flex', gap: 15, justifyContent: 'center', margin: '20px 0' }}>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{days}</p>
+        <p className="mini-caption" style={{ margin: 0 }}>days</p>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{hours}</p>
+        <p className="mini-caption" style={{ margin: 0 }}>hrs</p>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{minutes}</p>
+        <p className="mini-caption" style={{ margin: 0 }}>mins</p>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <p style={{ fontSize: 24, fontWeight: 'bold', margin: 0 }}>{seconds}</p>
+        <p className="mini-caption" style={{ margin: 0 }}>secs</p>
+      </div>
+    </div>
+  );
+}
+
+function MagicAtmosphere() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let particles: any[] = [];
+    const particleCount = 40;
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+
+    class Particle {
+      x: number; y: number; size: number; speedX: number; speedY: number; opacity: number;
+      constructor() {
+        this.x = Math.random() * w;
+        this.y = Math.random() * h;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = Math.random() * 0.5 - 0.25;
+        this.speedY = Math.random() * 0.5 - 0.25;
+        this.opacity = Math.random() * 0.5 + 0.1;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x > w) this.x = 0;
+        if (this.x < 0) this.x = w;
+        if (this.y > h) this.y = 0;
+        if (this.y < 0) this.y = h;
+      }
+      draw() {
+        if (!ctx) return;
+        ctx.fillStyle = `rgba(163, 57, 47, ${this.opacity})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    for (let i = 0; i < particleCount; i++) particles.push(new Particle());
+
+    function animate() {
+      if (!ctx) return;
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+      requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    const handleResize = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />;
+}
+
 export default function App() {
   const [screen, setScreen] = useState("home");
   const [to, setTo] = useState("");
@@ -1204,6 +1328,9 @@ export default function App() {
   const [adminWhispers, setAdminWhispers] = useState<any[]>([]);
   const [adminBoxes, setAdminBoxes] = useState<any[]>([]);
   const [adminTotalBoxes, setAdminTotalBoxes] = useState(0);
+  const [adminRevenue, setAdminTotalRevenue] = useState(0);
+  const [adminPopularItems, setAdminPopularItems] = useState<Record<string, number>>({});
+  const [adminPopularThemes, setAdminPopularThemes] = useState<Record<string, number>>({});
   const [appPrice, setAppPrice] = useState(5000);
   const [appIsPaid, setAppIsPaid] = useState(true);
   const [appAnnouncement, setAppAnnouncement] = useState("");
@@ -1218,7 +1345,7 @@ export default function App() {
   const longPressTimer = useRef<any>(null);
 
   const boxSize = useMemo(() => calculateBoxSize(items, customMoodSrc), [items, customMoodSrc]);
-  const isBoxTooHeavy = boxSize > 8 * 1024 * 1024; // 8MB limit for text-based Supabase reliability
+  const isBoxTooHeavy = false; // Limit removed thanks to boutique storage
 
   useEffect(() => {
     // Check for missing critical environment variables
@@ -1275,44 +1402,52 @@ export default function App() {
 
   async function fetchSettings() {
     try {
+      console.log("[Admin] Fetching vault settings...");
       const { data, error } = await supabase.from('settings').select('*');
       if (error) throw error;
+
       if (data) {
         data.forEach(s => {
-          const val = String(s.value);
-          if (s.key === 'box_price') setAppPrice(Number(val));
-          if (s.key === 'is_paid') setAppIsPaid(val === 'true');
-          if (s.key === 'announcement') setAppAnnouncement(val);
+          const val = s.value;
+          // Robust conversion: handles boolean, string, or JSON-stringified values
+          const isTrue = val === true || val === "true" || val === '"true"';
+
+          if (s.key === 'box_price') setAppPrice(Number(String(val).replace(/"/g, '')));
+          if (s.key === 'is_paid') setAppIsPaid(isTrue);
+          if (s.key === 'announcement') setAppAnnouncement(String(val).replace(/"/g, ''));
         });
+        console.log("[Admin] Settings loaded successfully.");
       }
     } catch (e) {
-      console.error("Fetch Settings Error:", e);
+      console.error("[Admin] Fetch Settings Error:", e);
     }
   }
 
   async function updateSetting(key: string, value: any) {
+    // Standardize all values to strings for boutique database consistency
     const stringValue = String(value);
     setAdminSyncSyncing(true);
     try {
-      console.log(`[Admin] Updating ${key} to ${stringValue}...`);
+      console.log(`[Admin] Syncing setting: ${key} = ${stringValue}`);
+
+      // Attempt upsert (insert or update)
       const { error } = await supabase
         .from('settings')
-        .upsert([{ key, value: stringValue }]);
-      if (error) {
-        console.error("[Admin] Supabase Error:", error);
-        throw error;
-      }
+        .upsert({ key, value: stringValue }, { onConflict: 'key' });
 
+      if (error) throw error;
+
+      // Update local state immediately for snappy UI
       if (key === 'box_price') setAppPrice(Number(value));
       if (key === 'is_paid') setAppIsPaid(value === true || value === 'true');
       if (key === 'announcement') setAppAnnouncement(stringValue);
 
-      console.log(`[Admin] ${key} updated successfully.`);
+      console.log(`[Admin] Setting synced successfully.`);
     } catch (e: any) {
-      console.error("Update Setting Error:", e);
-      alert(`Failed to update setting: ${e.message}. Ensure you ran the Supabase SQL commands!`);
+      console.error("[Admin] Sync Error:", e);
+      alert(`Vault Sync Failed: ${e.message}. Check your internet and Supabase policies.`);
     } finally {
-      setTimeout(() => setAdminSyncSyncing(false), 800);
+      setTimeout(() => setAdminSyncSyncing(false), 500);
     }
   }
 
@@ -1388,19 +1523,21 @@ export default function App() {
   async function handleMoodFile(e: any) {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    if (file.size > 10 * 1024 * 1024) {
-      alert("Audio file too large (max 10MB).");
+    if (file.size > 20 * 1024 * 1024) {
+      alert("Audio file too heavy (max 20MB).");
       return;
     }
     setMoodBusy(true);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setCustomMoodSrc(ev.target?.result as string);
+    try {
+      const publicUrl = await uploadMedia(file);
+      setCustomMoodSrc(publicUrl);
       setCustomMoodName(file.name);
       setMood("custom");
+    } catch (err) {
+      alert("Failed to upload custom song to boutique stash.");
+    } finally {
       setMoodBusy(false);
-    };
-    reader.readAsDataURL(file);
+    }
   }
 
   async function handlePay() {
@@ -1817,7 +1954,29 @@ export default function App() {
         .from('boxes')
         .select('*')
         .order('created_at', { ascending: false });
-      if (!boxesError) setAdminBoxes(boxes || []);
+      if (!boxesError) {
+        setAdminBoxes(boxes || []);
+
+        // Calculate Analytics
+        let rev = 0;
+        const itemStats: Record<string, number> = {};
+        const themeStats: Record<string, number> = {};
+
+        boxes?.forEach(b => {
+          if (b.data.reference) rev += (appPrice / 100); // Approximate based on current price if reference exists
+
+          b.data.items?.forEach((it: any) => {
+            itemStats[it.type] = (itemStats[it.type] || 0) + 1;
+          });
+
+          const theme = b.data.theme || 'default';
+          themeStats[theme] = (themeStats[theme] || 0) + 1;
+        });
+
+        setAdminTotalRevenue(rev);
+        setAdminPopularItems(itemStats);
+        setAdminPopularThemes(themeStats);
+      }
 
       // 2. Fetch Total Boxes
       const { count, error: countError } = await supabase
@@ -1915,6 +2074,7 @@ export default function App() {
 
   return (
     <div className="app-root" style={{ background: currentTheme.bg, color: currentTheme.text } as any}>
+      <MagicAtmosphere />
       <div className="bg-hearts">
         {bgHearts.map(h => (
           <div key={h.id} className="floating-heart" style={{ left: h.left, animationDelay: h.delay, '--d': h.duration, '--o': h.opacity } as any}>
@@ -2442,17 +2602,17 @@ export default function App() {
               </p>
 
               <div style={{ marginTop: 10, textAlign: 'center' }}>
-                 <p className="mini-caption" style={{ marginBottom: 4 }}>Box Weight</p>
+                 <p className="mini-caption" style={{ marginBottom: 4 }}>Boutique Stash</p>
                  <div style={{ width: '100%', height: 6, background: 'rgba(0,0,0,0.05)', borderRadius: 10, overflow: 'hidden' }}>
                     <div style={{
-                      width: `${Math.min(100, (boxSize / (8 * 1024 * 1024)) * 100)}%`,
+                      width: `${Math.min(100, (items.length / 15) * 100)}%`,
                       height: '100%',
-                      background: isBoxTooHeavy ? 'var(--stamp-red)' : 'var(--ok)',
+                      background: 'var(--ok)',
                       transition: 'width 0.3s ease'
                     }} />
                  </div>
                  <p style={{ fontSize: 10, marginTop: 4, opacity: 0.6 }}>
-                   {isBoxTooHeavy ? "⚠ Box is too heavy to seal. Remove some items." : `${(boxSize / 1024 / 1024).toFixed(1)}MB / 8.0MB`}
+                   {items.length} / 15 items tucked in
                  </p>
               </div>
 
@@ -2602,6 +2762,27 @@ export default function App() {
                 </div>
               </div>
 
+              <div style={{ background: 'var(--ink)', color: 'var(--paper)', padding: '20px', borderRadius: 8, marginBottom: 25, textAlign: 'center' }}>
+                <p className="eyebrow" style={{ color: 'var(--paper)', opacity: 0.6 }}>Estimated Revenue</p>
+                <p style={{ fontSize: 32, fontWeight: 'bold', margin: '5px 0' }}>{adminRevenue.toLocaleString()} KES</p>
+                <p className="mini-caption" style={{ opacity: 0.4 }}>Based on paid box references</p>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 15, marginBottom: 25, textAlign: 'left' }}>
+                <div style={{ background: '#fff', padding: 15, borderRadius: 8, border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <p className="mini-caption">Popular Items</p>
+                  {Object.entries(adminPopularItems).sort((a,b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => (
+                    <p key={k} style={{ fontSize: 12, margin: '4px 0' }}>• {k}: <strong>{v}</strong></p>
+                  ))}
+                </div>
+                <div style={{ background: '#fff', padding: 15, borderRadius: 8, border: '1px solid rgba(0,0,0,0.05)' }}>
+                  <p className="mini-caption">Top Themes</p>
+                  {Object.entries(adminPopularThemes).sort((a,b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => (
+                    <p key={k} style={{ fontSize: 12, margin: '4px 0' }}>• {k}: <strong>{v}</strong></p>
+                  ))}
+                </div>
+              </div>
+
               <div className="double-rule"><span /><span /></div>
               <p className="mini-caption">*** economy & status controls ***</p>
 
@@ -2734,7 +2915,15 @@ export default function App() {
           <div className="unwrap-screen" onMouseMove={handleBoxDrag} onTouchMove={handleBoxDrag}>
             <div className="box-stage">
               {isLocked ? (
-                <div className="kiosk-card paper-card ethereal-glow"><div className="stamp-badge">Locked Time Capsule</div><p className="hint" style={{ margin: '15px 0' }}>This package from <strong>{openedPackage.from}</strong> is sealed until:</p><div className="code-display" style={{ fontSize: 18 }}>{new Date(unlockTime!).toLocaleString()}</div><p className="hint">Come back then to lift the lid!</p><button className="btn-secondary" style={{ marginTop: 20 }} onClick={resetAll}>Go Back</button></div>
+                <div className="kiosk-card paper-card ethereal-glow">
+                  <div className="stamp-badge">Locked Time Capsule</div>
+                  <p className="hint" style={{ margin: '15px 0' }}>This package from <strong>{openedPackage.from}</strong> is sealed until it's ready.</p>
+
+                  <Countdown targetDate={unlockTime!} />
+
+                  <p className="hint" style={{ fontSize: 11 }}>Come back when the timer hits zero!</p>
+                  <button className="btn-secondary" style={{ marginTop: 25, width: '100%' }} onClick={resetAll}>Go Back</button>
+                </div>
               ) : (
                 <>
                   <p className="unwrap-lead">A package from <strong>{openedPackage.from}</strong> has arrived.<br/><span style={{ fontSize: 12, opacity: 0.6 }}>Spin to see, tap to unwrap</span></p>
