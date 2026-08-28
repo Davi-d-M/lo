@@ -192,16 +192,26 @@ async function uploadMedia(file: File) {
   const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
   const filePath = `uploads/${fileName}`;
 
+  console.log(`[Storage] Attempting upload: ${filePath} (${file.type}, ${file.size} bytes)`);
+
   const { error: uploadError } = await supabase.storage
     .from('tucked_items')
-    .upload(filePath, file);
+    .upload(filePath, file, {
+      cacheControl: '3600',
+      upsert: false,
+      contentType: file.type
+    });
 
-  if (uploadError) throw uploadError;
+  if (uploadError) {
+    console.error("[Storage] Upload Error:", uploadError);
+    throw uploadError;
+  }
 
   const { data } = supabase.storage
     .from('tucked_items')
     .getPublicUrl(filePath);
 
+  console.log(`[Storage] Upload successful. Public URL: ${data.publicUrl}`);
   return data.publicUrl;
 }
 
@@ -490,8 +500,9 @@ function AddItemModal({ type, onAdd, onClose }: any) {
     try {
       const publicUrl = await uploadMedia(file);
       setPhotoDataUrl(publicUrl);
-    } catch (err) {
-      setPhotoErr("Failed to upload photo to boutique stash.");
+    } catch (err: any) {
+      console.error("[Photo] Upload catch:", err);
+      setPhotoErr(`Upload failed: ${err.message || "Boutique stash unavailable"}. Ensure bucket exists!`);
     } finally {
       setPhotoBusy(false);
     }
@@ -509,8 +520,9 @@ function AddItemModal({ type, onAdd, onClose }: any) {
     try {
       const publicUrl = await uploadMedia(file);
       setVideoDataUrl(publicUrl);
-    } catch (err) {
-      setVideoErr("Failed to upload video to boutique stash.");
+    } catch (err: any) {
+      console.error("[Video] Upload catch:", err);
+      setVideoErr(`Upload failed: ${err.message || "Boutique stash unavailable"}.`);
     } finally {
       setVideoBusy(false);
     }
@@ -528,8 +540,9 @@ function AddItemModal({ type, onAdd, onClose }: any) {
     try {
       const publicUrl = await uploadMedia(file);
       setSongDataUrl(publicUrl);
-    } catch (err) {
-      setSongErr("Failed to upload audio to boutique stash.");
+    } catch (err: any) {
+      console.error("[Audio] Upload catch:", err);
+      setSongErr(`Upload failed: ${err.message || "Boutique stash unavailable"}.`);
     } finally {
       setSongBusy(false);
     }
@@ -1594,8 +1607,9 @@ export default function App() {
       setCustomMoodSrc(publicUrl);
       setCustomMoodName(file.name);
       setMood("custom");
-    } catch (err) {
-      alert("Failed to upload custom song to boutique stash.");
+    } catch (err: any) {
+      console.error("[Mood] Upload catch:", err);
+      alert(`Failed to upload custom song: ${err.message || "Stash unavailable"}`);
     } finally {
       setMoodBusy(false);
     }
