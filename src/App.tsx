@@ -1356,6 +1356,7 @@ export default function App() {
   const [adminSecretFound, setAdminSecretFound] = useState(false);
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminSyncing, setAdminSyncSyncing] = useState(false);
+  const [wrongSecretError, setWrongSecretError] = useState(false);
   const longPressTimer = useRef<any>(null);
 
   const boxSize = useMemo(() => calculateBoxSize(items, customMoodSrc), [items, customMoodSrc]);
@@ -1731,7 +1732,8 @@ export default function App() {
   async function loadPackage(code: string) {
     if (!code) return;
 
-    const cleanCode = code.replace(/\s/g, "");
+    const cleanCode = code.trim().replace(/\s/g, "").toUpperCase();
+    setWrongSecretError(false);
 
     // Check for Master Admin Code (Stealth Entry)
     if (adminModeReady && cleanCode === "LOVEMASTER") {
@@ -1752,8 +1754,13 @@ export default function App() {
     setOpenLoading(true);
     setOpenError("");
     try {
-      const { data, error } = await supabase.from('boxes').select('data').eq('code', code).single();
-      if (error || !data) throw new Error("not found");
+      const { data, error } = await supabase.from('boxes').select('data').eq('code', cleanCode).single();
+      if (error) {
+        if (error.code === 'PGRST116') throw new Error("not_found");
+        throw error;
+      }
+      if (!data) throw new Error("not_found");
+
       const pkg = data.data;
       if (pkg.unlockAt && pkg.unlockAt > Date.now()) {
         setIsLocked(true);
@@ -1761,7 +1768,9 @@ export default function App() {
       } else {
         setIsLocked(false);
       }
+
       if (pkg.secretWord && pkg.secretWord !== enterSecret.trim().toLowerCase()) {
+        if (enterSecret.trim()) setWrongSecretError(true);
         setNeedsSecret(true);
         setScreen("open");
         setOpenLoading(false);
@@ -1772,8 +1781,13 @@ export default function App() {
       setOpenedPackage(pkg);
       setLidUp(false);
       setScreen("unwrap");
-    } catch (err) {
-      setOpenError("No package found with that code.");
+    } catch (err: any) {
+      console.error("[LoadPackage] Error:", err);
+      if (err.message === "not_found") {
+        setOpenError("No package found with that code.");
+      } else {
+        setOpenError("Connection issue. Please check your internet.");
+      }
       setScreen("open");
     } finally {
       setOpenLoading(false);
@@ -1787,25 +1801,24 @@ export default function App() {
   }
 
   useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const codeFromUrl = params.get("code");
+    const params = new URLSearchParams(window.location.search);
+    const codeFromUrl = params.get("code");
 
-      if (codeFromUrl) {
-        const code = codeFromUrl.trim().toUpperCase();
+    if (codeFromUrl) {
+      const code = codeFromUrl.trim().toUpperCase();
+      setEnterCode(code);
+      // Small delay to ensure state is processed and initial settings are fetched
+      setTimeout(() => loadPackage(code), 500);
+    } else {
+      // Legacy Link Parsing (e.g. /path/CODE.html)
+      const path = window.location.pathname;
+      const match = path.match(/\/([A-Za-z0-9_-]+)\.html$/);
+      if (match && match[1]) {
+        const code = match[1].trim().toUpperCase();
         setEnterCode(code);
-        loadPackage(code);
-      } else {
-        // Legacy Link Parsing (e.g. /path/CODE.html)
-        const path = window.location.pathname;
-        const match = path.match(/\/([A-Za-z0-9_-]+)\.html$/);
-        if (match && match[1]) {
-          const code = match[1].trim().toUpperCase();
-          setEnterCode(code);
-          loadPackage(code);
-        }
+        setTimeout(() => loadPackage(code), 500);
       }
-    } catch (e) {}
+    }
   }, []);
 
   async function startReactionCapture() {
@@ -2777,12 +2790,22 @@ export default function App() {
                 <div style={{ width: '100%', padding: '10px 0' }}>
                   <div className="stamp-badge" style={{ marginBottom: 20 }}>Vault Locked</div>
                   <p className="hint" style={{ margin: '0 0 15px', lineHeight: 1.6 }}>This package is secured with a boutique seal. Please enter the <strong>Secret Word</strong> to unwrap.</p>
+
+                  {wrongSecretError && (
+                    <p style={{ color: 'var(--stamp-red)', fontSize: 12, fontWeight: 'bold', marginBottom: 10 }}>
+                      ⚠ Incorrect secret word. Please try again.
+                    </p>
+                  )}
+
                   <div style={{ position: 'relative', marginBottom: 15 }}>
                     <input
                       className="code-input"
                       type={showSecretWord ? "text" : "password"}
                       value={enterSecret}
-                      onChange={(e) => setEnterSecret(e.target.value)}
+                      onChange={(e) => {
+                        setEnterSecret(e.target.value);
+                        setWrongSecretError(false);
+                      }}
                       placeholder="ENTER SECRET WORD"
                       onKeyDown={(e) => e.key === "Enter" && loadPackage(enterCode)}
                     />
@@ -2801,7 +2824,10 @@ export default function App() {
                   <button className="btn-link" style={{ marginTop: 20, fontSize: 11 }} onClick={() => { setNeedsSecret(false); setEnterSecret(""); }}>Try different code</button>
                 </div>
               ) : (
-                <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => setEnterCode(e.target.value.toUpperCase())} placeholder="XXXXXX" maxLength={15} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
+                <><Mail size={26} strokeWidth={1.5} color="var(--airmail)" /><h2>Open a package</h2><p className="hint">Enter the code you were given.</p><input className="code-input" value={enterCode} onChange={(e) => {
+                  setEnterCode(e.target.value.trim().toUpperCase());
+                  setOpenError("");
+                }} placeholder="XXXXXX" maxLength={15} onKeyDown={(e) => e.key === "Enter" && handleOpen()} /><button className="btn-primary" onClick={handleOpen} disabled={openLoading || !enterCode.trim()}>{openLoading ? "Looking…" : <>Open <ArrowRight size={15} /></>}</button></>
               )}
               {openError && <p className="error-text">{openError}</p>}
             </div>
